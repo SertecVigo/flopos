@@ -1,11 +1,34 @@
 {
   "paging": {
     "page": 1,
-    "count": 1,
+    "count": 2,
     "pageSize": 30,
-    "itemTotal": 1
+    "itemTotal": 2
   },
   "packages": [
+    {
+      "id": "com.flop.motogp",
+      "title": "MotoGP Fantasy",
+      "iconUri": "https://sertecvigo.github.io/flopos/motogp-icon.png",
+      "manifestUrl": "https://sertecvigo.github.io/flopos/motogp.manifest.json",
+      "manifest": {
+        "id": "com.flop.motogp",
+        "version": "1.0.0",
+        "type": "web",
+        "title": "MotoGP Fantasy",
+        "appDescription": "Liga Fantasy MotoGP - predicciones de podio y mundial. Abre motogp-fantasy-league.web.app a pantalla completa.",
+        "iconUri": "https://sertecvigo.github.io/flopos/motogp-icon.png",
+        "sourceUrl": "https://github.com/SertecVigo/flopos",
+        "rootRequired": false,
+        "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.motogp_1.0.0_all.ipk",
+        "ipkHash": {
+          "sha256": "e2f8000399b644946c2418e50c7b7717a3f8fca43567b66ebdc4213fdd565cd2"
+        },
+        "ipkSize": 10356
+      },
+      "pool": "main",
+      "shortDescription": "Liga Fantasy MotoGP en tu tele"
+    },
     {
       "id": "com.flop.flopos",
       "title": "FlopOS",

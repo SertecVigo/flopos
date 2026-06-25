@@ -1,0 +1,15 @@
+{
+  "id": "com.flop.motogp",
+  "version": "1.0.0",
+  "type": "web",
+  "title": "MotoGP Fantasy",
+  "appDescription": "Liga Fantasy MotoGP - predicciones de podio y mundial",
+  "iconUri": "https://sertecvigo.github.io/flopos/motogp-icon.png",
+  "sourceUrl": "https://github.com/SertecVigo/flopos",
+  "rootRequired": false,
+  "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.motogp_1.0.0_all.ipk",
+  "ipkHash": {
+    "sha256": "e2f8000399b644946c2418e50c7b7717a3f8fca43567b66ebdc4213fdd565cd2"
+  },
+  "ipkSize": 10356
+}
