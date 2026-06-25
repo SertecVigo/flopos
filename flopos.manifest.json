@@ -1,0 +1,15 @@
+{
+  "id": "com.flop.flopos",
+  "version": "1.0.0",
+  "type": "web",
+  "title": "FlopOS",
+  "appDescription": "App de prueba - Bienvenido a FlopOS",
+  "iconUri": "https://sertecvigo.github.io/flopos/icon.png",
+  "sourceUrl": "https://github.com/SertecVigo/flopos",
+  "rootRequired": false,
+  "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.flopos_1.0.0_all.ipk",
+  "ipkHash": {
+    "sha256": "762bbb78819b8609c1411e22f029c8213ed6f463353438660c8cbeb339eabd6f"
+  },
+  "ipkSize": 8114
+}

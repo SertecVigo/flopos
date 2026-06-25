@@ -1,0 +1,33 @@
+{
+  "paging": {
+    "page": 1,
+    "count": 1,
+    "pageSize": 30,
+    "itemTotal": 1
+  },
+  "packages": [
+    {
+      "id": "com.flop.flopos",
+      "title": "FlopOS",
+      "iconUri": "https://sertecvigo.github.io/flopos/icon.png",
+      "manifestUrl": "https://sertecvigo.github.io/flopos/flopos.manifest.json",
+      "manifest": {
+        "id": "com.flop.flopos",
+        "version": "1.0.0",
+        "type": "web",
+        "title": "FlopOS",
+        "appDescription": "App de prueba - Bienvenido a FlopOS",
+        "iconUri": "https://sertecvigo.github.io/flopos/icon.png",
+        "sourceUrl": "https://github.com/SertecVigo/flopos",
+        "rootRequired": false,
+        "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.flopos_1.0.0_all.ipk",
+        "ipkHash": {
+          "sha256": "762bbb78819b8609c1411e22f029c8213ed6f463353438660c8cbeb339eabd6f"
+        },
+        "ipkSize": 8114
+      },
+      "pool": "main",
+      "shortDescription": "Bienvenido a FlopOS - tu primera app homebrew"
+    }
+  ]
+}
