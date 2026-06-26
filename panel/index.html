@@ -14,6 +14,9 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:
 #weather{background:linear-gradient(135deg,#162043,#0e1530);border:1px solid var(--line);
   border-radius:24px;padding:28px 36px;display:flex;flex-direction:column;gap:18px}
 #weather h2{font-size:30px;color:var(--dim);font-weight:600;letter-spacing:1px}
+.whead{display:flex;align-items:center;justify-content:space-between}
+.brand{font-size:26px;font-weight:800;letter-spacing:3px;color:var(--accent);opacity:.85}
+.brand span{color:var(--txt)}
 .wdays{display:grid;grid-template-columns:repeat(5,1fr);gap:20px;flex:1}
 .wday{background:#0c1330;border:1px solid var(--line);border-radius:18px;display:flex;
   flex-direction:column;align-items:center;justify-content:center;gap:10px}
@@ -57,7 +60,10 @@ body.night #app{filter:brightness(.55)}
 </head>
 <body>
 <div id="app">
-  <section id="weather"><h2>🌤️ Tiempo en <span id="wcity">Vigo</span></h2><div class="wdays" id="wdays"></div></section>
+  <section id="weather">
+    <div class="whead"><h2>🌤️ Tiempo en <span id="wcity">Vigo</span></h2><div class="brand">Flop<span>OS</span></div></div>
+    <div class="wdays" id="wdays"></div>
+  </section>
   <div id="bottom">
     <section id="calendar">
       <div class="cal-head"><div class="cal-nav"><button data-nav="-1">‹</button></div>
