@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920,height=1080">
+  <title>Panel Familiar</title>
+  <style>
+:root{--bg:#0b1020;--panel:#141a33;--line:#26304f;--txt:#e8ebff;--dim:#8b93c2;--accent:#7c5cff;--rain:#4ea3ff;}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--txt);
+  font-family:"LG Smart UI","Segoe UI",system-ui,sans-serif}
+#app{display:grid;grid-template-rows:340px 1fr;height:100%;padding:48px;gap:28px}
+/* Banda tiempo (protagonista) */
+#weather{background:linear-gradient(135deg,#162043,#0e1530);border:1px solid var(--line);
+  border-radius:24px;padding:28px 36px;display:flex;flex-direction:column;gap:18px}
+#weather h2{font-size:30px;color:var(--dim);font-weight:600;letter-spacing:1px}
+.wdays{display:grid;grid-template-columns:repeat(5,1fr);gap:20px;flex:1}
+.wday{background:#0c1330;border:1px solid var(--line);border-radius:18px;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:10px}
+.wday .dow{font-size:30px;color:var(--dim)} .wday .ic{font-size:72px;line-height:1}
+.wday .temp{font-size:40px;font-weight:700} .wday .temp .min{color:var(--dim);font-weight:500}
+.wday .rain{font-size:26px;color:var(--rain)}
+/* Fila inferior: calendario + columna */
+#bottom{display:grid;grid-template-columns:1fr 560px;gap:28px;min-height:0}
+#calendar,#side{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:28px}
+#side{display:flex;flex-direction:column;gap:24px}
+/* Calendario */
+.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.cal-head h2{font-size:34px} .cal-nav{display:flex;gap:10px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
+.cal-dow{font-size:22px;color:var(--dim);text-align:center;padding:6px 0}
+.cal-cell{aspect-ratio:1;border-radius:12px;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;font-size:30px;position:relative;border:2px solid transparent}
+.cal-cell.dim{color:#3a4570;opacity:.35}
+.cal-cell.today{background:#1c2550}
+.cal-cell.sel{border-color:var(--accent);background:#241d4d}
+.cal-cell .dot{position:absolute;bottom:8px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
+/* Widgets columna */
+.clock .time{font-size:96px;font-weight:800;line-height:1} .clock .date{font-size:34px;color:var(--dim)}
+.card h3{font-size:26px;color:var(--dim);margin-bottom:8px}
+.race .name{font-size:38px;font-weight:700} .race .cd{font-size:30px;color:var(--accent)}
+.shop ul{list-style:none;font-size:30px;line-height:1.6} .shop li::before{content:"• ";color:var(--accent)}
+/* Estados */
+#offline{position:fixed;bottom:18px;right:18px;font-size:20px;color:#ff8a8a;opacity:0;transition:.3s}
+#offline.show{opacity:.85}
+body.night #app{filter:brightness(.55)}
+/* Modal día */
+#dayModal{position:fixed;inset:0;background:rgba(5,7,16,.75);display:none;align-items:center;justify-content:center}
+#dayModal.show{display:flex}
+.modal{width:760px;background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:32px}
+.modal h2{font-size:40px;margin-bottom:16px}
+.evt{display:flex;justify-content:space-between;font-size:30px;padding:12px;border-bottom:1px solid var(--line)}
+.modal input,.modal select{font-size:28px;padding:10px;border-radius:10px;border:1px solid var(--line);
+  background:#0c1330;color:var(--txt)}
+.modal .focus{outline:3px solid var(--accent)}
+  </style>
+</head>
+<body>
+<div id="app">
+  <section id="weather"><h2>🌤️ Tiempo en <span id="wcity">Vigo</span></h2><div class="wdays" id="wdays"></div></section>
+  <div id="bottom">
+    <section id="calendar">
+      <div class="cal-head"><div class="cal-nav"><button data-nav="-1">‹</button></div>
+        <h2 id="calTitle">—</h2><div class="cal-nav"><button data-nav="1">›</button></div></div>
+      <div class="cal-grid" id="calGrid"></div>
+    </section>
+    <section id="side">
+      <div class="clock"><div class="time" id="clock">--:--</div><div class="date" id="cdate">—</div></div>
+      <div class="card race"><h3>🏁 Próxima carrera</h3><div class="name" id="raceName">—</div>
+        <div class="cd" id="raceCd">—</div><div id="raceLeague" class="dim"></div></div>
+      <div class="card shop"><h3>🛒 Lista de la compra</h3><ul id="shopList"></ul></div>
+    </section>
+  </div>
+</div>
+<div id="offline">⚠️ sin conexión</div>
+<div id="dayModal"><div class="modal" id="modalBox"></div></div>
+<script src="mock.js"></script>
+<script src="panel.js"></script>
+</body>
+</html>
