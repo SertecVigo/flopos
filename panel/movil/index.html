@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Panel Familiar — Calendario</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#0b1020;--panel:#141a33;--line:#26304f;--txt:#e8ebff;--dim:#8b93c2;--accent:#7c5cff}
+    body{background:var(--bg);color:var(--txt);font-family:"Segoe UI",system-ui,sans-serif;
+      padding:16px;max-width:560px;margin:0 auto}
+    h1{font-size:22px;margin-bottom:4px} .sub{color:var(--dim);font-size:14px;margin-bottom:16px}
+    .nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+    .nav button{background:var(--panel);color:var(--txt);border:1px solid var(--line);
+      border-radius:10px;font-size:20px;width:48px;height:44px}
+    .nav b{font-size:18px}
+    .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+    label{display:block;font-size:13px;color:var(--dim);margin:8px 0 4px}
+    input,select{width:100%;font-size:17px;padding:11px;border-radius:10px;border:1px solid var(--line);
+      background:#0c1330;color:var(--txt)}
+    .row{display:flex;gap:10px} .row>div{flex:1}
+    button.primary{width:100%;margin-top:14px;background:var(--accent);color:#fff;border:0;
+      border-radius:10px;font-size:17px;padding:13px;font-weight:600}
+    .evt{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+    .evt:last-child{border-bottom:0} .evt .meta{font-size:13px;color:var(--dim)}
+    .evt button{background:transparent;border:0;font-size:20px;color:#ff8a8a}
+    .day{font-weight:700;color:var(--accent);font-size:14px;margin:10px 0 2px}
+    .empty{color:var(--dim);font-size:15px;padding:8px 0}
+    .status{font-size:13px;color:var(--dim);text-align:center;margin-top:10px;min-height:18px}
+  </style>
+</head>
+<body>
+  <h1>📅 Calendario familiar</h1>
+  <div class="sub">Añade notas y citas — aparecen en la tele</div>
+
+  <div class="card">
+    <label>Fecha</label>
+    <input type="date" id="fDate">
+    <div class="row">
+      <div><label>Tipo</label>
+        <select id="fType"><option value="nota">Nota</option><option value="cita">Cita</option></select></div>
+      <div><label>Hora (citas)</label><input type="time" id="fTime"></div>
+    </div>
+    <label>Texto</label>
+    <input id="fText" placeholder="p. ej. Dentista, Cumple de…">
+    <button class="primary" id="add">➕ Añadir</button>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="nav">
+    <button id="prev">‹</button><b id="mTitle">—</b><button id="next">›</button>
+  </div>
+  <div class="card" id="list"><div class="empty">Cargando…</div></div>
+
+  <script src="../config.js"></script>
+  <script>
+    const C = window.PANEL_CFG;
+    const ORIGIN = location.origin;
+    let view = new Date(); view.setDate(1);
+    const pad = n => (n<10?"0":"")+n;
+    const ymd = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+    const monthStr = () => ymd(view).slice(0,7);
+
+    document.getElementById("fDate").value = ymd(new Date());
+
+    function setStatus(t){ document.getElementById("status").textContent = t || ""; }
+
+    async function load(){
+      document.getElementById("mTitle").textContent =
+        view.toLocaleDateString("es-ES",{month:"long",year:"numeric"});
+      const list = document.getElementById("list");
+      try{
+        const res = await fetch(`${C.READ_URL}?token=${encodeURIComponent(C.TOKEN)}&month=${monthStr()}`,{cache:"no-store"});
+        const d = await res.json();
+        if(d.error) throw new Error(d.error);
+        const evs = (d.calendar?.events||[]).sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")));
+        if(!evs.length){ list.innerHTML = "<div class='empty'>Sin notas ni citas este mes</div>"; return; }
+        let html="", lastDay="";
+        evs.forEach(e=>{
+          if(e.date!==lastDay){ lastDay=e.date;
+            const p=new Date(e.date+"T00:00:00").toLocaleDateString("es-ES",{weekday:"short",day:"numeric",month:"short"});
+            html += `<div class="day">${p}</div>`; }
+          html += `<div class="evt"><div><span>${e.text}</span>`+
+            `<div class="meta">${e.type==="cita"&&e.time?"🕐 "+e.time+" · ":""}${e.type}</div></div>`+
+            `<button data-del="${e.id}">🗑️</button></div>`;
+        });
+        list.innerHTML = html;
+        list.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>del(b.dataset.del));
+      }catch(e){ list.innerHTML = "<div class='empty'>No se pudo cargar ("+e.message+")</div>"; }
+    }
+
+    async function write(payload){
+      const res = await fetch(`${C.WRITE_URL}?token=${encodeURIComponent(C.TOKEN)}`,{
+        method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(payload)});
+      return res.json();
+    }
+    async function add(){
+      const date=document.getElementById("fDate").value;
+      const text=document.getElementById("fText").value.trim();
+      if(!date||!text){ setStatus("Pon fecha y texto"); return; }
+      setStatus("Guardando…");
+      const r=await write({action:"add",date,type:document.getElementById("fType").value,
+        time:document.getElementById("fTime").value||null,text,createdBy:"movil"});
+      if(r.ok){ document.getElementById("fText").value=""; setStatus("✅ Añadido");
+        view=new Date(date); view.setDate(1); await load(); }
+      else setStatus("Error: "+(r.error||"?"));
+    }
+    async function del(id){ await write({action:"delete",id}); await load(); }
+
+    document.getElementById("add").onclick=add;
+    document.getElementById("prev").onclick=()=>{view.setMonth(view.getMonth()-1);load();};
+    document.getElementById("next").onclick=()=>{view.setMonth(view.getMonth()+1);load();};
+    load();
+  </script>
+</body>
+</html>

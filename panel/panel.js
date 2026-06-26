@@ -113,4 +113,55 @@ document.querySelectorAll("[data-nav]").forEach(b=>{
   b.onclick=()=>{ viewMonth.setMonth(viewMonth.getMonth()+parseInt(b.dataset.nav,10));
     if(typeof refreshData==="function") refreshData(); renderCalendar(); };
 });
-function openDay(){ /* Task 4.1 */ }
+// --- Modal del día: ver/añadir/borrar notas y citas ---
+async function saveEvent(ev){
+  const c = window.PANEL_CFG; if(!c) return;
+  try{
+    await fetch(`${c.WRITE_URL}?token=${encodeURIComponent(c.TOKEN)}`,{
+      method:"POST", headers:{"Content-Type":"text/plain"}, body:JSON.stringify(ev)});
+  }catch(e){ /* offline: el refresh mostrará el indicador */ }
+  await refreshData();
+}
+
+function openDay(date){
+  const box = document.getElementById("modalBox");
+  const pretty = new Date(date+"T00:00:00").toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"});
+  const evs = (DATA.calendar?.events||[]).filter(e=>e.date===date)
+              .sort((a,b)=>(a.time||"").localeCompare(b.time||""));
+  box.innerHTML =
+    `<h2>${pretty}</h2>` +
+    (evs.map(e=>`<div class="evt"><span>${e.type==="cita"&&e.time?e.time+" · ":""}${e.text}</span>`+
+      `<button data-del="${e.id}">🗑️</button></div>`).join("")
+      || "<div class='dim' style='font-size:28px;padding:10px 0'>Sin notas ni citas</div>") +
+    `<div style="margin-top:20px;display:flex;gap:10px;align-items:center">
+       <select id="evType"><option value="nota">Nota</option><option value="cita">Cita</option></select>
+       <input id="evTime" placeholder="hh:mm" maxlength="5" style="width:120px">
+       <input id="evText" placeholder="Escribe aquí…" style="flex:1">
+       <button id="evAdd">➕ Añadir</button>
+     </div>
+     <div class="dim" style="margin-top:14px;font-size:22px">Pulsa ATRÁS en el mando para cerrar</div>`;
+  document.getElementById("dayModal").classList.add("show");
+
+  const txt = box.querySelector("#evText"); if(txt) txt.focus();
+  async function doAdd(){
+    const t = box.querySelector("#evText").value.trim(); if(!t) return;
+    await saveEvent({ action:"add", date,
+      type: box.querySelector("#evType").value,
+      time: box.querySelector("#evTime").value || null,
+      text: t, createdBy:"tv" });
+    openDay(date);                          // re-render con el nuevo evento
+  }
+  box.querySelector("#evAdd").onclick = doAdd;
+  txt.addEventListener("keydown", e=>{ if(e.keyCode===13){ e.stopPropagation(); doAdd(); } });
+  box.querySelectorAll("[data-del]").forEach(b=>{
+    b.onclick = async ()=>{ await saveEvent({action:"delete", id:b.dataset.del}); openDay(date); };
+  });
+}
+function closeDay(){ document.getElementById("dayModal").classList.remove("show"); }
+
+// Atrás (461) cierra el modal cuando está abierto
+document.addEventListener("keydown",(e)=>{
+  if(e.keyCode===461 && document.getElementById("dayModal").classList.contains("show")){
+    e.preventDefault(); closeDay();
+  }
+});
