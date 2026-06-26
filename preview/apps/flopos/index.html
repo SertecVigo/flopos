@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1">
+  <title>FlopOS</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0b1020;
+      font-family: "LG Smart UI", "Segoe UI", system-ui, sans-serif;
+      color: #fff;
+    }
+
+    /* Fondo con gradiente animado */
+    .stage {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background:
+        radial-gradient(1200px 800px at 20% 15%, #1c2452 0%, transparent 60%),
+        radial-gradient(1000px 700px at 85% 90%, #3a1d6e 0%, transparent 55%),
+        linear-gradient(135deg, #0b1020 0%, #11163a 100%);
+    }
+
+    /* Resplandor que respira detrás del texto */
+    .glow {
+      position: absolute;
+      width: 900px;
+      height: 900px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(124,92,255,0.35) 0%, transparent 60%);
+      filter: blur(20px);
+      animation: breathe 6s ease-in-out infinite;
+    }
+
+    @keyframes breathe {
+      0%, 100% { transform: scale(0.9); opacity: 0.7; }
+      50%      { transform: scale(1.1); opacity: 1; }
+    }
+
+    .logo {
+      position: relative;
+      z-index: 2;
+      font-size: 40px;
+      font-weight: 600;
+      letter-spacing: 8px;
+      text-transform: uppercase;
+      color: #b9a9ff;
+      opacity: 0;
+      animation: rise 0.9s ease forwards 0.1s;
+    }
+
+    .title {
+      position: relative;
+      z-index: 2;
+      font-size: 132px;
+      font-weight: 800;
+      line-height: 1.05;
+      text-align: center;
+      background: linear-gradient(90deg, #ffffff 0%, #b9a9ff 50%, #7c5cff 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      text-shadow: 0 0 60px rgba(124,92,255,0.25);
+      opacity: 0;
+      animation: rise 1s ease forwards 0.35s;
+    }
+
+    .subtitle {
+      position: relative;
+      z-index: 2;
+      margin-top: 28px;
+      font-size: 34px;
+      font-weight: 400;
+      color: #8b93c2;
+      opacity: 0;
+      animation: rise 1s ease forwards 0.6s;
+    }
+
+    .badge {
+      position: relative;
+      z-index: 2;
+      margin-top: 56px;
+      padding: 14px 36px;
+      font-size: 26px;
+      border: 2px solid rgba(124,92,255,0.5);
+      border-radius: 999px;
+      color: #c9c2ff;
+      background: rgba(124,92,255,0.08);
+      opacity: 0;
+      animation: rise 1s ease forwards 0.85s;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(30px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .clock {
+      position: absolute;
+      bottom: 60px;
+      right: 80px;
+      z-index: 2;
+      font-size: 28px;
+      color: #5d6493;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .hint {
+      position: absolute;
+      bottom: 60px;
+      left: 80px;
+      z-index: 2;
+      font-size: 24px;
+      color: #5d6493;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="glow"></div>
+    <div class="logo">Flop&nbsp;OS</div>
+    <h1 class="title">Bienvenido a FlopOS</h1>
+    <p class="subtitle">Tu primera app homebrew para LG webOS</p>
+    <div class="badge">v1.0.0 · funcionando en tu TV</div>
+
+    <div class="hint">Pulsa ATRÁS en el mando para salir</div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+
+  <script>
+    // Relojito para demostrar que el JS corre en la tele
+    function tick() {
+      var d = new Date();
+      var p = function (n) { return (n < 10 ? "0" : "") + n; };
+      document.getElementById("clock").textContent =
+        p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+    }
+    setInterval(tick, 1000);
+    tick();
+
+    // El botón ATRÁS del mando (tecla 461) cierra la app en webOS
+    document.addEventListener("keydown", function (e) {
+      if (e.keyCode === 461 && typeof window.close === "function") {
+        window.close();
+      }
+    });
+  </script>
+</body>
+</html>

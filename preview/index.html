@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>🧪 Banco de pruebas webOS — Flop</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg:#0d0f1a; --panel:#161a2e; --accent:#7c5cff; --txt:#e8e9f3; --dim:#8b93c2; }
+    html, body { height: 100%; background: var(--bg); color: var(--txt);
+      font-family: "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+
+    header {
+      height: 56px; display: flex; align-items: center; gap: 16px;
+      padding: 0 18px; background: var(--panel); border-bottom: 1px solid #262b47;
+    }
+    header h1 { font-size: 17px; font-weight: 600; white-space: nowrap; }
+    header .apps { display: flex; gap: 8px; margin-left: 8px; }
+    header button.app {
+      background: #20253f; color: var(--txt); border: 1px solid #2f365a;
+      padding: 7px 14px; border-radius: 8px; font-size: 14px; cursor: pointer;
+    }
+    header button.app.active { background: var(--accent); border-color: var(--accent); }
+    header .spacer { flex: 1; }
+    header .meta { font-size: 12px; color: var(--dim); }
+
+    .toolbar {
+      height: 44px; display: flex; align-items: center; gap: 6px;
+      padding: 0 18px; background: #11142400; }
+    .toolbar .pad { display: flex; gap: 4px; }
+    .toolbar button {
+      background: #20253f; color: var(--txt); border: 1px solid #2f365a;
+      width: 38px; height: 32px; border-radius: 7px; font-size: 14px; cursor: pointer;
+    }
+    .toolbar button.wide { width: auto; padding: 0 12px; }
+    .toolbar .hint { margin-left: 12px; font-size: 12px; color: var(--dim); }
+
+    .stagewrap {
+      position: absolute; top: 100px; left: 0; right: 0; bottom: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(800px 500px at 50% 40%, #161a2e 0%, var(--bg) 70%);
+      overflow: hidden;
+    }
+    .tv-shell { position: relative; }
+    .bezel {
+      position: absolute; inset: -14px; border-radius: 18px;
+      background: #05060c; box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 2px #2a2f4d;
+    }
+    .tv {
+      position: relative; width: 1920px; height: 1080px;
+      transform-origin: center center; background: #000; border-radius: 4px; overflow: hidden;
+    }
+    .tv iframe { width: 1920px; height: 1080px; border: 0; display: block; }
+    .res {
+      position: absolute; bottom: -30px; left: 0; font-size: 12px; color: var(--dim);
+    }
+    .keylog {
+      position: absolute; bottom: -30px; right: 0; font-size: 12px; color: var(--accent);
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🧪 Banco de pruebas webOS</h1>
+    <div class="apps" id="apps"></div>
+    <div class="spacer"></div>
+    <div class="meta" id="meta">—</div>
+  </header>
+
+  <div class="toolbar">
+    <div class="pad">
+      <button data-k="38" title="Arriba">▲</button>
+      <button data-k="37" title="Izquierda">◀</button>
+      <button data-k="13" class="wide" title="OK / Enter">OK</button>
+      <button data-k="39" title="Derecha">▶</button>
+      <button data-k="40" title="Abajo">▼</button>
+    </div>
+    <button data-k="461" class="wide" title="Atrás (webOS 461)">← Atrás</button>
+    <button id="reload" class="wide" title="Recargar app">⟳ Recargar</button>
+    <span class="hint">Usa el teclado (flechas, Enter, Retroceso) o estos botones — se envían como teclas del mando.</span>
+  </div>
+
+  <div class="stagewrap" id="stagewrap">
+    <div class="tv-shell" id="shell">
+      <div class="bezel"></div>
+      <div class="tv" id="tv">
+        <iframe id="frame" title="app"></iframe>
+        <div class="res">1920 × 1080</div>
+        <div class="keylog" id="keylog"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Apps disponibles en el banco de pruebas.
+    // local: se sirve desde este mismo repo (mismo origen → mando simulado funciona).
+    // remote: URL externa (p.ej. una PWA en vivo).
+    var APPS = [
+      { id: "flopos", name: "FlopOS", src: "apps/flopos/index.html", kind: "local" },
+      { id: "motogp", name: "MotoGP Fantasy", src: "apps/motogp/index.html", kind: "local" }
+    ];
+
+    var frame = document.getElementById("frame");
+    var keylog = document.getElementById("keylog");
+    var meta = document.getElementById("meta");
+    var current = null;
+
+    function loadApp(app) {
+      current = app;
+      frame.src = app.src + (app.src.indexOf("?") < 0 ? "?" : "&") + "t=" + Math.floor(performance.now());
+      meta.textContent = app.name + " · " + app.kind + " · " + app.src;
+      document.querySelectorAll("button.app").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.id === app.id);
+      });
+    }
+
+    // Botones de selección de app
+    var appsBar = document.getElementById("apps");
+    APPS.forEach(function (app) {
+      var b = document.createElement("button");
+      b.className = "app"; b.textContent = app.name; b.dataset.id = app.id;
+      b.onclick = function () { loadApp(app); };
+      appsBar.appendChild(b);
+    });
+
+    // --- Simulación del mando: envía keydown con el keyCode de webOS al iframe ---
+    function sendKey(code) {
+      keylog.textContent = "keyCode " + code;
+      try {
+        var doc = frame.contentWindow.document; // mismo origen para apps 'local'
+        ["keydown", "keyup"].forEach(function (type) {
+          var ev = new KeyboardEvent(type, { bubbles: true, cancelable: true });
+          Object.defineProperty(ev, "keyCode", { get: function () { return code; } });
+          Object.defineProperty(ev, "which",  { get: function () { return code; } });
+          doc.dispatchEvent(ev);
+        });
+      } catch (e) {
+        keylog.textContent = "keyCode " + code + " (app externa: sin acceso)";
+      }
+    }
+
+    // Teclado físico → mando
+    document.addEventListener("keydown", function (e) {
+      var map = { Backspace: 461, Escape: 461, Enter: 13,
+                  ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
+      if (map[e.key] !== undefined) { e.preventDefault(); sendKey(map[e.key]); }
+    });
+    // Botones en pantalla
+    document.querySelectorAll(".toolbar button[data-k]").forEach(function (b) {
+      b.onclick = function () { sendKey(parseInt(b.dataset.k, 10)); };
+    });
+    document.getElementById("reload").onclick = function () { if (current) loadApp(current); };
+
+    // --- Escalado del "televisor" 1920×1080 al tamaño de la ventana ---
+    function fit() {
+      var wrap = document.getElementById("stagewrap");
+      var availW = wrap.clientWidth - 60;
+      var availH = wrap.clientHeight - 80;
+      var scale = Math.min(availW / 1920, availH / 1080);
+      document.getElementById("tv").style.transform = "scale(" + scale + ")";
+      document.getElementById("shell").style.width = (1920 * scale) + "px";
+      document.getElementById("shell").style.height = (1080 * scale) + "px";
+      // recolocar la "tv" centrada dentro del shell escalado
+      var tv = document.getElementById("tv");
+      tv.style.position = "absolute";
+      tv.style.left = "50%"; tv.style.top = "50%";
+      tv.style.transform = "translate(-50%,-50%) scale(" + scale + ")";
+    }
+    window.addEventListener("resize", fit);
+
+    // Arranque
+    loadApp(APPS[0]);
+    fit();
+  </script>
+</body>
+</html>
