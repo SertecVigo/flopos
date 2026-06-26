@@ -38,10 +38,30 @@ function renderClock(){
   document.body.classList.toggle("night", n.getHours()>=0 && n.getHours()<7);
 }
 
+let lastGood = window.PANEL_MOCK;
+async function refreshData(){
+  const c = window.PANEL_CFG; if(!c){ return; }
+  const month = ymd(viewMonth).slice(0,7);
+  try{
+    const res = await fetch(`${c.READ_URL}?token=${encodeURIComponent(c.TOKEN)}&month=${month}`,{cache:"no-store"});
+    if(!res.ok) throw new Error(res.status);
+    const j = await res.json();
+    if(j && j.error) throw new Error(j.error);
+    DATA = j; lastGood = j;
+    document.getElementById("offline").classList.remove("show");
+  }catch(e){
+    DATA = lastGood;                       // mantener último dato bueno
+    document.getElementById("offline").classList.add("show");
+  }
+  renderWeather(); renderRace(); renderShop(); renderCalendar();
+}
+
 function init(){
-  renderWeather(); renderRace(); renderShop(); renderClock();
-  renderCalendar();                      // Task 1.4
+  viewMonth = new Date(); viewMonth.setDate(1);     // mes actual
+  renderWeather(); renderRace(); renderShop(); renderClock(); renderCalendar(); // pinta mock al instante
+  refreshData();                                    // y trae datos reales
   setInterval(renderClock, 1000);
+  setInterval(refreshData, (window.PANEL_CFG && window.PANEL_CFG.REFRESH_MS) || 300000);
 }
 document.addEventListener("DOMContentLoaded", init);
 
