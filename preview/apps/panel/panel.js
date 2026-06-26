@@ -17,12 +17,17 @@ function renderWeather(){
 }
 
 function renderRace(){
-  const r = DATA.race; if(!r){ return; }
-  document.getElementById("raceName").textContent = `${r.series} · ${r.name}`;
-  const diff = new Date(r.startUtc) - new Date();
-  const dd = Math.max(0,Math.floor(diff/86400000)), hh = Math.max(0,Math.floor((diff%86400000)/3600000));
-  document.getElementById("raceCd").textContent = diff>0 ? `faltan ${dd}d ${hh}h` : "¡en curso!";
-  document.getElementById("raceLeague").textContent = r.league ? `Tu liga: ${r.league.pos}º · ${r.league.pts} pts` : "";
+  const races = (DATA.races && DATA.races.length) ? DATA.races : (DATA.race ? [DATA.race] : []);
+  const el = document.getElementById("raceList");
+  if(!races.length){ el.innerHTML = "<div class='dim'>—</div>"; return; }
+  const now = new Date();
+  el.innerHTML = races.map(r=>{
+    const diff = new Date(r.startUtc) - now;
+    const dd = Math.max(0,Math.floor(diff/86400000)), hh = Math.max(0,Math.floor((diff%86400000)/3600000));
+    const cd = diff>0 ? `faltan ${dd}d ${hh}h` : "¡en curso!";
+    const lg = r.league ? ` <span class="lg">· liga ${r.league.pos}º (${r.league.pts}pts)</span>` : "";
+    return `<div class="raceItem"><div class="rname">${r.series} · ${r.name}</div><div class="rcd">${cd}${lg}</div></div>`;
+  }).join("");
 }
 
 function renderShop(){

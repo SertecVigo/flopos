@@ -41,7 +41,9 @@ html,body{width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:
 /* Widgets columna */
 .clock .time{font-size:96px;font-weight:800;line-height:1} .clock .date{font-size:34px;color:var(--dim)}
 .card h3{font-size:26px;color:var(--dim);margin-bottom:8px}
-.race .name{font-size:38px;font-weight:700} .race .cd{font-size:30px;color:var(--accent)}
+.raceItem{margin:4px 0 14px} .raceItem:last-child{margin-bottom:0}
+.rname{font-size:32px;font-weight:700;line-height:1.15} .rcd{font-size:26px;color:var(--accent)}
+.rcd .lg{color:var(--dim)}
 .shop ul{list-style:none;font-size:30px;line-height:1.6} .shop li::before{content:"• ";color:var(--accent)}
 /* Estados */
 #offline{position:fixed;bottom:18px;right:18px;font-size:20px;color:#ff8a8a;opacity:0;transition:.3s}
@@ -72,8 +74,7 @@ body.night #app{filter:brightness(.55)}
     </section>
     <section id="side">
       <div class="clock"><div class="time" id="clock">--:--</div><div class="date" id="cdate">—</div></div>
-      <div class="card race"><h3>🏁 Próxima carrera</h3><div class="name" id="raceName">—</div>
-        <div class="cd" id="raceCd">—</div><div id="raceLeague" class="dim"></div></div>
+      <div class="card race"><h3>🏁 Próximas carreras</h3><div id="raceList"></div></div>
       <div class="card shop"><h3>🛒 Lista de la compra</h3><ul id="shopList"></ul></div>
     </section>
   </div>
