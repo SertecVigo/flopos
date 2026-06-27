@@ -64,7 +64,6 @@ td .dot{position:absolute;left:50%;bottom:7px;width:9px;height:9px;margin-left:-
 .shop .it{color:#e8ebff}.shop .b{color:#7c5cff}
 
 #offline{position:absolute;bottom:16px;right:18px;font-size:20px;color:#ff8a8a;display:none}
-#ua{position:absolute;bottom:2px;left:6px;font-size:14px;color:#445;font-family:monospace}
 
 /* Modal del día */
 #modal{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(5,7,16,.8);display:none}
@@ -103,7 +102,6 @@ td .dot{position:absolute;left:50%;bottom:7px;width:9px;height:9px;margin-left:-
 </div></div>
 <div id="offline">sin conexion</div>
 <div id="modal"><div id="modalBox"></div></div>
-<div id="ua"></div>
 
 <script>
 /* ===== Panel Familiar - versión ES5 compatible Chrome 38 (webOS antiguo) ===== */
@@ -281,7 +279,6 @@ window.addEventListener("resize", fitScale);
 
 /* ===== Arranque ===== */
 function init(){
-  try{ $("ua").innerHTML=esc(navigator.userAgent); }catch(e){}
   fitScale();
   renderClock(); renderCalendar();
   refresh();
