@@ -13,18 +13,18 @@
       "manifestUrl": "https://sertecvigo.github.io/flopos/panel.manifest.json",
       "manifest": {
         "id": "com.flop.panel",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "type": "web",
         "title": "Panel Familiar",
         "appDescription": "Panel familiar: tiempo 5 días, calendario con notas/citas, próxima carrera y lista de la compra",
         "iconUri": "https://sertecvigo.github.io/flopos/panel-icon.png",
         "sourceUrl": "https://github.com/SertecVigo/flopos",
         "rootRequired": false,
-        "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.panel_1.0.0_all.ipk",
+        "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.panel_1.0.1_all.ipk",
         "ipkHash": {
-          "sha256": "1993bb9a3691225f5ccdb8a2f28ea632f4bc897ba1690d53bd628847c265ab10"
+          "sha256": "bb644cdba66209e4c1111228326d40675f23673f382aaa6e401c8a48e1d84282"
         },
-        "ipkSize": 8474
+        "ipkSize": 8790
       },
       "pool": "main",
       "shortDescription": "Panel familiar para la tele"
@@ -36,18 +36,18 @@
       "manifestUrl": "https://sertecvigo.github.io/flopos/motogp.manifest.json",
       "manifest": {
         "id": "com.flop.motogp",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "type": "web",
         "title": "MotoGP Fantasy",
         "appDescription": "Liga Fantasy MotoGP - predicciones de podio y mundial. Abre motogp-fantasy-league.web.app a pantalla completa.",
         "iconUri": "https://sertecvigo.github.io/flopos/motogp-icon.png",
         "sourceUrl": "https://github.com/SertecVigo/flopos",
         "rootRequired": false,
-        "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.motogp_1.0.0_all.ipk",
+        "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.motogp_1.0.1_all.ipk",
         "ipkHash": {
-          "sha256": "e2f8000399b644946c2418e50c7b7717a3f8fca43567b66ebdc4213fdd565cd2"
+          "sha256": "14972861c23d81cd832fae5ae051686f5b974822b7d6aa544207c63c8cd4e0d6"
         },
-        "ipkSize": 10356
+        "ipkSize": 10384
       },
       "pool": "main",
       "shortDescription": "Liga Fantasy MotoGP en tu tele"
