@@ -7,13 +7,13 @@ function pad(n){ return (n<10?"0":"")+n; }
 
 function renderWeather(){
   const el = document.getElementById("wdays"); el.innerHTML = "";
-  (DATA.weather?.days||[]).forEach(d=>{
+  ((DATA.weather && DATA.weather.days)||[]).forEach(d=>{
     el.insertAdjacentHTML("beforeend",
       `<div class="wday"><div class="dow">${d.dow}</div><div class="ic">${ICONS[d.icon]||"❓"}</div>
        <div class="temp">${d.max}°<span class="min"> / ${d.min}°</span></div>
        <div class="rain">💧 ${d.rainProb}%</div></div>`);
   });
-  document.getElementById("wcity").textContent = DATA.weather?.city || "Vigo";
+  document.getElementById("wcity").textContent = (DATA.weather && DATA.weather.city) || "Vigo";
 }
 
 function renderRace(){
@@ -61,7 +61,19 @@ async function refreshData(){
   renderWeather(); renderRace(); renderShop(); renderCalendar();
 }
 
+// Escala el diseño fijo 1920x1080 para llenar el viewport real de la TV.
+function fitScale(){
+  var sc = document.getElementById("scaler");
+  if(!sc) return;
+  var s = Math.min(window.innerWidth/1920, window.innerHeight/1080);
+  sc.style.transform = "scale(" + s + ")";
+  sc.style.left = ((window.innerWidth - 1920*s)/2) + "px";
+  sc.style.top  = ((window.innerHeight - 1080*s)/2) + "px";
+}
+window.addEventListener("resize", fitScale);
+
 function init(){
+  fitScale();                                       // llenar la pantalla de la TV
   viewMonth = new Date(); viewMonth.setDate(1);     // mes actual
   renderWeather(); renderRace(); renderShop(); renderClock(); renderCalendar(); // pinta mock al instante
   refreshData();                                    // y trae datos reales
@@ -78,7 +90,7 @@ function renderCalendar(){
   const y = viewMonth.getFullYear(), m = viewMonth.getMonth();
   document.getElementById("calTitle").textContent =
     viewMonth.toLocaleDateString("es-ES",{month:"long",year:"numeric"});
-  const events = (DATA.calendar?.events)||[];
+  const events = (DATA.calendar && DATA.calendar.events)||[];
   const hasEvt = new Set(events.map(e=>e.date));
   const first = new Date(y,m,1);
   const startIdx = (first.getDay()+6)%7;          // lunes=0
@@ -131,7 +143,7 @@ async function saveEvent(ev){
 function openDay(date){
   const box = document.getElementById("modalBox");
   const pretty = new Date(date+"T00:00:00").toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"});
-  const evs = (DATA.calendar?.events||[]).filter(e=>e.date===date)
+  const evs = ((DATA.calendar && DATA.calendar.events)||[]).filter(e=>e.date===date)
               .sort((a,b)=>(a.time||"").localeCompare(b.time||""));
   box.innerHTML =
     `<h2>${pretty}</h2>` +
