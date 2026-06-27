@@ -16,19 +16,20 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0b1020;color:#e8ebf
 #app.night{-webkit-filter:brightness(.55);filter:brightness(.55)}
 
 /* Tiempo */
-#weather{height:330px;background:#162043;border:1px solid #26304f;border-radius:24px;padding:24px 32px}
+#weather{height:340px;background:#162043;border:1px solid #26304f;border-radius:24px;padding:24px 32px}
 .whead{display:-webkit-box;display:flex;-webkit-box-pack:justify;-webkit-justify-content:space-between;
   justify-content:space-between;-webkit-box-align:center;-webkit-align-items:center;align-items:center;margin-bottom:14px}
 .whead h2{font-size:30px;color:#8b93c2;font-weight:600}
 .brand{font-size:26px;font-weight:800;letter-spacing:3px;color:#7c5cff}
 .brand b{color:#e8ebff;font-weight:800}
-.wdays{display:-webkit-box;display:flex;height:210px}
+.wdays{display:-webkit-box;display:flex;height:220px}
 .wday{-webkit-box-flex:1;-webkit-flex:1;flex:1;background:#0c1330;border:1px solid #26304f;border-radius:18px;
-  margin-right:18px;text-align:center;padding-top:22px}
+  margin-right:18px;text-align:center;padding-top:14px}
 .wday:last-child{margin-right:0}
 .wday .dow{font-size:30px;color:#8b93c2}
-.wday .cond{font-size:26px;color:#cfd6ff;margin-top:10px}
-.wday .temp{font-size:42px;font-weight:700;margin-top:12px}
+.wday .ic{margin:6px 0}
+.wday .ic svg{display:block;margin:0 auto}
+.wday .temp{font-size:42px;font-weight:700;margin-top:6px}
 .wday .temp .min{color:#8b93c2;font-weight:400}
 .wday .rain{font-size:24px;color:#4ea3ff;margin-top:10px}
 
@@ -122,6 +123,29 @@ function pad(n){ return (n<10?"0":"")+n; }
 function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 function esc(s){ s=""+s; return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
+/* Iconos del tiempo en SVG (compatibles con Chrome 38, con color) */
+function iconSVG(name){
+  var V='<svg width="82" height="82" viewBox="0 0 64 64">';
+  var sun='<circle cx="32" cy="29" r="12" fill="#ffd34d"/>'
+    +'<g stroke="#ffd34d" stroke-width="4" stroke-linecap="round">'
+    +'<line x1="32" y1="6" x2="32" y2="12"/><line x1="32" y1="46" x2="32" y2="52"/>'
+    +'<line x1="9" y1="29" x2="15" y2="29"/><line x1="49" y1="29" x2="55" y2="29"/>'
+    +'<line x1="15" y1="12" x2="19" y2="16"/><line x1="45" y1="42" x2="49" y2="46"/>'
+    +'<line x1="15" y1="46" x2="19" y2="42"/><line x1="45" y1="16" x2="49" y2="12"/></g>';
+  var cloud='<g fill="#c2cbe8"><circle cx="23" cy="40" r="11"/><circle cx="37" cy="34" r="14"/>'
+    +'<circle cx="47" cy="41" r="10"/><rect x="19" y="41" width="32" height="12" rx="6"/></g>';
+  if(name==="sun") return V+sun+'</svg>';
+  if(name==="cloud") return V+cloud+'</svg>';
+  if(name==="partly") return V+'<g transform="translate(16,-4) scale(0.62)">'+sun+'</g>'+cloud+'</svg>';
+  if(name==="fog") return V+cloud+'<g stroke="#9aa3c8" stroke-width="3" stroke-linecap="round">'
+    +'<line x1="16" y1="57" x2="40" y2="57"/><line x1="26" y1="62" x2="50" y2="62"/></g></svg>';
+  if(name==="rain") return V+cloud+'<g stroke="#4ea3ff" stroke-width="4" stroke-linecap="round">'
+    +'<line x1="24" y1="55" x2="21" y2="62"/><line x1="34" y1="55" x2="31" y2="62"/><line x1="44" y1="55" x2="41" y2="62"/></g></svg>';
+  if(name==="storm") return V+cloud+'<polygon points="35,49 28,59 33,59 31,64 43,54 37,54 40,49" fill="#ffd34d"/></svg>';
+  if(name==="snow") return V+cloud+'<g fill="#e3eaff"><circle cx="25" cy="58" r="3"/><circle cx="35" cy="61" r="3"/><circle cx="45" cy="58" r="3"/></g></svg>';
+  return V+cloud+'</svg>';
+}
+
 function xhr(method, url, body, cb){
   try{
     var x = new XMLHttpRequest();
@@ -149,7 +173,7 @@ function renderWeather(){
   var days=(DATA.weather&&DATA.weather.days)||[], html="", i, d;
   for(i=0;i<days.length;i++){ d=days[i];
     html+='<div class="wday"><div class="dow">'+esc(d.dow)+'</div>'
-      +'<div class="cond">'+esc(COND[d.icon]||"")+'</div>'
+      +'<div class="ic">'+iconSVG(d.icon)+'</div>'
       +'<div class="temp">'+d.max+'&deg;<span class="min"> / '+d.min+'&deg;</span></div>'
       +'<div class="rain">Lluvia '+(d.rainProb||0)+'%</div></div>';
   }
