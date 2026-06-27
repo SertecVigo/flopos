@@ -57,10 +57,13 @@ td .dot{position:absolute;left:50%;bottom:7px;width:9px;height:9px;margin-left:-
 .clock .date{font-size:32px;color:#8b93c2;margin-top:4px}
 .card{margin-top:26px}
 .card h3{font-size:26px;color:#8b93c2;margin-bottom:8px}
-.raceItem{margin-bottom:14px}
-.rname{font-size:30px;font-weight:700}
+.raceItem{margin-bottom:16px}
+.rname{font-size:27px;font-weight:700}
+.rname .lg{font-size:22px;color:#8b93c2;font-weight:400}
 .rcd{font-size:25px;color:#7c5cff}
-.rcd .lg{color:#8b93c2}
+.rsess{font-size:23px;color:#cfd6ff;margin-top:5px}
+.rsess b{color:#7c5cff;font-weight:700}
+.rsess .cd{color:#8b93c2}
 .shop p{font-size:30px;line-height:1.55}
 .shop .it{color:#e8ebff}.shop .b{color:#7c5cff}
 
@@ -182,16 +185,20 @@ function renderWeather(){
 }
 
 function renderRaces(){
-  var rs=DATA.races&&DATA.races.length?DATA.races:(DATA.race?[DATA.race]:[]);
-  var now=new Date(), html="", i, r, diff, dd, hh, cd, lg;
+  var rs=DATA.races&&DATA.races.length?DATA.races:[];
+  var now=new Date(), html="", i, j, r, sess, s, diff, dd, hh, cd, lg;
   if(!rs.length){ $("raceList").innerHTML='<div class="rcd">&mdash;</div>'; return; }
   for(i=0;i<rs.length;i++){ r=rs[i];
-    diff=new Date(r.startUtc).getTime()-now.getTime();
-    dd=Math.max(0,Math.floor(diff/86400000)); hh=Math.max(0,Math.floor((diff%86400000)/3600000));
-    cd=diff>0?("faltan "+dd+"d "+hh+"h"):"en curso";
-    lg=r.league?(' <span class="lg">- liga '+r.league.pos+'&ordm; ('+r.league.pts+'pts)</span>'):"";
-    html+='<div class="raceItem"><div class="rname">'+esc(r.series)+' - '+esc(r.name)+'</div>'
-      +'<div class="rcd">'+cd+lg+'</div></div>';
+    lg=r.league?(' <span class="lg">liga '+r.league.pos+'&ordm; ('+r.league.pts+'pts)</span>'):"";
+    html+='<div class="raceItem"><div class="rname">'+esc(r.series)+' &middot; '+esc(r.name)+lg+'</div>';
+    sess=r.sessions||[];
+    for(j=0;j<sess.length;j++){ s=sess[j];
+      diff=new Date(s.startUtc).getTime()-now.getTime();
+      dd=Math.max(0,Math.floor(diff/86400000)); hh=Math.max(0,Math.floor((diff%86400000)/3600000));
+      cd=diff>0?("faltan "+dd+"d "+hh+"h"):"en curso";
+      html+='<div class="rsess"><b>'+esc(s.typeLabel||s.type)+'</b> '+esc(s.label)+' <span class="cd">('+cd+')</span></div>';
+    }
+    html+='</div>';
   }
   $("raceList").innerHTML=html;
 }
