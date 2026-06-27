@@ -1,97 +1,297 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=1920,height=1080">
-  <title>Panel Familiar</title>
-  <style>
-:root{--bg:#0b1020;--panel:#141a33;--line:#26304f;--txt:#e8ebff;--dim:#8b93c2;--accent:#7c5cff;--rain:#4ea3ff;}
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920,height=1080">
+<title>Panel Familiar</title>
+<style>
+/* Compatible con Chrome 38 (webOS antiguo): sin grid, sin var(), sin aspect-ratio.
+   Layout con flexbox + tabla; colores literales. */
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--txt);
-  font-family:"LG Smart UI","Segoe UI",system-ui,sans-serif}
-/* Escalado: el panel se diseña a 1920x1080 y se escala para llenar el viewport real de la TV */
-#scaler{position:absolute;top:0;left:0;transform-origin:top left}
-#app{width:1920px;height:1080px;display:grid;grid-template-rows:340px 1fr;padding:48px;gap:28px}
-/* Banda tiempo (protagonista) */
-#weather{background:linear-gradient(135deg,#162043,#0e1530);border:1px solid var(--line);
-  border-radius:24px;padding:28px 36px;display:flex;flex-direction:column;gap:18px}
-#weather h2{font-size:30px;color:var(--dim);font-weight:600;letter-spacing:1px}
-.whead{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-.brand{font-size:26px;font-weight:800;letter-spacing:3px;color:var(--accent);opacity:.85}
-.brand span{color:var(--txt)}
-.wdays{display:grid;grid-template-columns:repeat(5,1fr);gap:20px;flex:1}
-.wday{background:#0c1330;border:1px solid var(--line);border-radius:18px;display:flex;
-  flex-direction:column;align-items:center;justify-content:center}
-.wday .dow{font-size:30px;color:var(--dim);margin-bottom:10px} .wday .ic{font-size:72px;line-height:1;margin-bottom:10px}
-.wday .temp{font-size:40px;font-weight:700;margin-bottom:6px} .wday .temp .min{color:var(--dim);font-weight:500}
-.wday .rain{font-size:26px;color:var(--rain)}
-/* Fila inferior: calendario + columna */
-#bottom{display:grid;grid-template-columns:1fr 560px;gap:28px;min-height:0}
-#calendar,#side{background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:28px}
-#side{display:flex;flex-direction:column}
-#side > *{margin-bottom:24px} #side > *:last-child{margin-bottom:0}
-/* Calendario */
-.cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-.cal-head h2{font-size:34px} .cal-nav button{font-size:30px;background:#20253f;color:var(--txt);border:1px solid var(--line);border-radius:8px;width:44px;height:44px}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
-.cal-dow{font-size:22px;color:var(--dim);text-align:center;padding:6px 0}
-.cal-cell{height:68px;border-radius:12px;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;font-size:30px;position:relative;border:2px solid transparent}
-.cal-cell.dim{color:#3a4570;opacity:.35}
-.cal-cell.today{background:#1c2550}
-.cal-cell.sel{border-color:var(--accent);background:#241d4d}
-.cal-cell .dot{position:absolute;bottom:8px;width:10px;height:10px;border-radius:50%;background:var(--accent)}
-/* Widgets columna */
-.clock .time{font-size:96px;font-weight:800;line-height:1} .clock .date{font-size:34px;color:var(--dim)}
-.card h3{font-size:26px;color:var(--dim);margin-bottom:8px}
-.raceItem{margin:4px 0 14px} .raceItem:last-child{margin-bottom:0}
-.rname{font-size:32px;font-weight:700;line-height:1.15} .rcd{font-size:26px;color:var(--accent)}
-.rcd .lg{color:var(--dim)}
-.shop ul{list-style:none;font-size:30px;line-height:1.6} .shop li:before{content:"• ";color:var(--accent)}
-/* Estados */
-#offline{position:fixed;bottom:18px;right:18px;font-size:20px;color:#ff8a8a;opacity:0;transition:.3s}
-#offline.show{opacity:.85}
-body.night #app{filter:brightness(.55)}
-/* Modal día */
-#dayModal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(5,7,16,.75);display:none;align-items:center;justify-content:center}
-#dayModal.show{display:flex}
-.modal{width:760px;background:var(--panel);border:1px solid var(--line);border-radius:24px;padding:32px}
-.modal h2{font-size:40px;margin-bottom:16px}
-.evt{display:flex;justify-content:space-between;font-size:30px;padding:12px;border-bottom:1px solid var(--line)}
-.modal input,.modal select{font-size:28px;padding:10px;border-radius:10px;border:1px solid var(--line);
-  background:#0c1330;color:var(--txt)}
-.modal .focus{outline:3px solid var(--accent)}
-#ua{position:fixed;bottom:2px;left:6px;font-size:15px;color:#556;z-index:99999;font-family:monospace}
-  </style>
+html,body{width:100%;height:100%;overflow:hidden;background:#0b1020;color:#e8ebff;
+  font-family:"LG Smart UI","Segoe UI",Arial,sans-serif}
+#scaler{position:absolute;top:0;left:0;-webkit-transform-origin:top left;transform-origin:top left}
+#app{width:1920px;height:1080px;padding:44px;display:-webkit-box;display:flex;
+  -webkit-box-orient:vertical;-webkit-flex-direction:column;flex-direction:column}
+#app.night{-webkit-filter:brightness(.55);filter:brightness(.55)}
+
+/* Tiempo */
+#weather{height:330px;background:#162043;border:1px solid #26304f;border-radius:24px;padding:24px 32px}
+.whead{display:-webkit-box;display:flex;-webkit-box-pack:justify;-webkit-justify-content:space-between;
+  justify-content:space-between;-webkit-box-align:center;-webkit-align-items:center;align-items:center;margin-bottom:14px}
+.whead h2{font-size:30px;color:#8b93c2;font-weight:600}
+.brand{font-size:26px;font-weight:800;letter-spacing:3px;color:#7c5cff}
+.brand b{color:#e8ebff;font-weight:800}
+.wdays{display:-webkit-box;display:flex;height:210px}
+.wday{-webkit-box-flex:1;-webkit-flex:1;flex:1;background:#0c1330;border:1px solid #26304f;border-radius:18px;
+  margin-right:18px;text-align:center;padding-top:22px}
+.wday:last-child{margin-right:0}
+.wday .dow{font-size:30px;color:#8b93c2}
+.wday .cond{font-size:26px;color:#cfd6ff;margin-top:10px}
+.wday .temp{font-size:42px;font-weight:700;margin-top:12px}
+.wday .temp .min{color:#8b93c2;font-weight:400}
+.wday .rain{font-size:24px;color:#4ea3ff;margin-top:10px}
+
+/* Fila inferior */
+#bottom{-webkit-box-flex:1;-webkit-flex:1;flex:1;display:-webkit-box;display:flex;margin-top:26px}
+#calendar{-webkit-box-flex:1;-webkit-flex:1;flex:1;background:#141a33;border:1px solid #26304f;
+  border-radius:24px;padding:24px;margin-right:26px}
+#side{width:560px;background:#141a33;border:1px solid #26304f;border-radius:24px;padding:26px}
+
+/* Calendario en TABLA */
+.cal-head{display:-webkit-box;display:flex;-webkit-box-pack:justify;-webkit-justify-content:space-between;
+  justify-content:space-between;-webkit-box-align:center;-webkit-align-items:center;align-items:center;margin-bottom:14px}
+.cal-head h2{font-size:32px}
+.cal-head button{font-size:28px;background:#20253f;color:#e8ebff;border:1px solid #26304f;border-radius:8px;width:46px;height:46px}
+table.cal{width:100%;border-collapse:collapse;table-layout:fixed}
+table.cal th{font-size:22px;color:#8b93c2;padding:6px 0;font-weight:600}
+table.cal td{height:66px;text-align:center;font-size:30px;position:relative;border:2px solid transparent;border-radius:10px}
+td.dim{color:#3a4570}
+td.today{background:#1c2550}
+td.sel{border-color:#7c5cff;background:#241d4d}
+td .dot{position:absolute;left:50%;bottom:7px;width:9px;height:9px;margin-left:-4px;background:#7c5cff;border-radius:50%}
+
+/* Columna lateral */
+.clock .time{font-size:92px;font-weight:800;line-height:1}
+.clock .date{font-size:32px;color:#8b93c2;margin-top:4px}
+.card{margin-top:26px}
+.card h3{font-size:26px;color:#8b93c2;margin-bottom:8px}
+.raceItem{margin-bottom:14px}
+.rname{font-size:30px;font-weight:700}
+.rcd{font-size:25px;color:#7c5cff}
+.rcd .lg{color:#8b93c2}
+.shop p{font-size:30px;line-height:1.55}
+.shop .it{color:#e8ebff}.shop .b{color:#7c5cff}
+
+#offline{position:absolute;bottom:16px;right:18px;font-size:20px;color:#ff8a8a;display:none}
+#ua{position:absolute;bottom:2px;left:6px;font-size:14px;color:#445;font-family:monospace}
+
+/* Modal del día */
+#modal{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(5,7,16,.8);display:none}
+#modal.show{display:block}
+#modalBox{position:absolute;top:50%;left:50%;width:820px;margin-left:-410px;margin-top:-230px;
+  background:#141a33;border:1px solid #26304f;border-radius:24px;padding:30px}
+#modalBox h2{font-size:38px;margin-bottom:14px}
+.evt{display:-webkit-box;display:flex;-webkit-box-pack:justify;-webkit-justify-content:space-between;
+  justify-content:space-between;font-size:28px;padding:12px 4px;border-bottom:1px solid #26304f}
+.evt button{background:transparent;border:0;color:#ff8a8a;font-size:26px}
+.frm{margin-top:18px}
+.frm select,.frm input{font-size:26px;padding:10px;border-radius:8px;border:1px solid #26304f;background:#0c1330;color:#e8ebff;margin-right:8px}
+.frm input.t{width:520px}
+.frm button{font-size:26px;padding:10px 16px;border-radius:8px;border:0;background:#7c5cff;color:#fff}
+.hint{margin-top:14px;font-size:22px;color:#8b93c2}
+</style>
 </head>
 <body>
-<div id="scaler">
-<div id="app">
-  <section id="weather">
-    <div class="whead"><h2>🌤️ Tiempo en <span id="wcity">Vigo</span></h2><div class="brand">Flop<span>OS</span></div></div>
+<div id="scaler"><div id="app">
+  <div id="weather">
+    <div class="whead"><h2>Tiempo en <span id="wcity">Vigo</span></h2><div class="brand">Flop<b>OS</b></div></div>
     <div class="wdays" id="wdays"></div>
-  </section>
-  <div id="bottom">
-    <section id="calendar">
-      <div class="cal-head"><div class="cal-nav"><button data-nav="-1">‹</button></div>
-        <h2 id="calTitle">—</h2><div class="cal-nav"><button data-nav="1">›</button></div></div>
-      <div class="cal-grid" id="calGrid"></div>
-    </section>
-    <section id="side">
-      <div class="clock"><div class="time" id="clock">--:--</div><div class="date" id="cdate">—</div></div>
-      <div class="card race"><h3>🏁 Próximas carreras</h3><div id="raceList"></div></div>
-      <div class="card shop"><h3>🛒 Lista de la compra</h3><ul id="shopList"></ul></div>
-    </section>
   </div>
-</div>
-</div>
-<div id="offline">⚠️ sin conexión</div>
-<div id="dayModal"><div class="modal" id="modalBox"></div></div>
+  <div id="bottom">
+    <div id="calendar">
+      <div class="cal-head"><button id="prev">&#8249;</button><h2 id="calTitle">&mdash;</h2><button id="next">&#8250;</button></div>
+      <table class="cal"><thead><tr><th>L</th><th>M</th><th>X</th><th>J</th><th>V</th><th>S</th><th>D</th></tr></thead>
+        <tbody id="calBody"></tbody></table>
+    </div>
+    <div id="side">
+      <div class="clock"><div class="time" id="clock">--:--</div><div class="date" id="cdate">&mdash;</div></div>
+      <div class="card"><h3>Pr&oacute;ximas carreras</h3><div id="raceList"></div></div>
+      <div class="card shop"><h3>Lista de la compra</h3><div id="shopList"></div></div>
+    </div>
+  </div>
+</div></div>
+<div id="offline">sin conexion</div>
+<div id="modal"><div id="modalBox"></div></div>
 <div id="ua"></div>
-<script src="mock.js"></script>
-<script src="config.js"></script>
-<script src="panel.js"></script>
-<script>/* diagnóstico ES5: muestra el navegador aunque panel.js falle */
-try{document.getElementById('ua').textContent=navigator.userAgent;}catch(e){}</script>
+
+<script>
+/* ===== Panel Familiar - versión ES5 compatible Chrome 38 (webOS antiguo) ===== */
+var CFG = {
+  READ_URL: "https://n8n.edmdesign.eu/webhook/panel-familiar",
+  WRITE_URL: "https://n8n.edmdesign.eu/webhook/panel-evento",
+  TOKEN: "pf_live_OjefI3uGl3dNAzzDJ4siW0O3YWLZVxWL",
+  REFRESH_MS: 300000
+};
+var COND = { sun:"Despejado", partly:"Poco nuboso", cloud:"Nublado", rain:"Lluvia",
+  storm:"Tormenta", snow:"Nieve", fog:"Niebla" };
+var DATA = { weather:{city:"Vigo",days:[]}, races:[], shopping:[], calendar:{events:[]} };
+var viewMonth = new Date(); viewMonth.setDate(1);
+var selDay = null;
+
+function $(id){ return document.getElementById(id); }
+function pad(n){ return (n<10?"0":"")+n; }
+function ymd(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function esc(s){ s=""+s; return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+function xhr(method, url, body, cb){
+  try{
+    var x = new XMLHttpRequest();
+    x.open(method, url, true);
+    if(method==="POST") x.setRequestHeader("Content-Type","text/plain");
+    x.onreadystatechange = function(){
+      if(x.readyState===4){
+        if(x.status>=200 && x.status<300){ var j=null; try{ j=JSON.parse(x.responseText); }catch(e){} cb(null,j); }
+        else cb(new Error("HTTP "+x.status));
+      }
+    };
+    x.send(body||null);
+  }catch(e){ cb(e); }
+}
+
+function fitScale(){
+  var sc=$("scaler"); if(!sc) return;
+  var s=Math.min(window.innerWidth/1920, window.innerHeight/1080);
+  sc.style.webkitTransform="scale("+s+")"; sc.style.transform="scale("+s+")";
+  sc.style.left=((window.innerWidth-1920*s)/2)+"px";
+  sc.style.top=((window.innerHeight-1080*s)/2)+"px";
+}
+
+function renderWeather(){
+  var days=(DATA.weather&&DATA.weather.days)||[], html="", i, d;
+  for(i=0;i<days.length;i++){ d=days[i];
+    html+='<div class="wday"><div class="dow">'+esc(d.dow)+'</div>'
+      +'<div class="cond">'+esc(COND[d.icon]||"")+'</div>'
+      +'<div class="temp">'+d.max+'&deg;<span class="min"> / '+d.min+'&deg;</span></div>'
+      +'<div class="rain">Lluvia '+(d.rainProb||0)+'%</div></div>';
+  }
+  $("wdays").innerHTML=html;
+  $("wcity").innerHTML=esc((DATA.weather&&DATA.weather.city)||"Vigo");
+}
+
+function renderRaces(){
+  var rs=DATA.races&&DATA.races.length?DATA.races:(DATA.race?[DATA.race]:[]);
+  var now=new Date(), html="", i, r, diff, dd, hh, cd, lg;
+  if(!rs.length){ $("raceList").innerHTML='<div class="rcd">&mdash;</div>'; return; }
+  for(i=0;i<rs.length;i++){ r=rs[i];
+    diff=new Date(r.startUtc).getTime()-now.getTime();
+    dd=Math.max(0,Math.floor(diff/86400000)); hh=Math.max(0,Math.floor((diff%86400000)/3600000));
+    cd=diff>0?("faltan "+dd+"d "+hh+"h"):"en curso";
+    lg=r.league?(' <span class="lg">- liga '+r.league.pos+'&ordm; ('+r.league.pts+'pts)</span>'):"";
+    html+='<div class="raceItem"><div class="rname">'+esc(r.series)+' - '+esc(r.name)+'</div>'
+      +'<div class="rcd">'+cd+lg+'</div></div>';
+  }
+  $("raceList").innerHTML=html;
+}
+
+function renderShop(){
+  var sh=DATA.shopping||[], i, html="";
+  if(!sh.length){ $("shopList").innerHTML='<p class="it">&mdash;</p>'; return; }
+  for(i=0;i<sh.length && i<8;i++){ html+='<p><span class="b">&bull; </span><span class="it">'+esc(sh[i])+'</span></p>'; }
+  $("shopList").innerHTML=html;
+}
+
+function renderClock(){
+  var n=new Date();
+  $("clock").innerHTML=pad(n.getHours())+":"+pad(n.getMinutes());
+  var dias=["domingo","lunes","martes","miércoles","jueves","viernes","sábado"];
+  var mes=["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+  $("cdate").innerHTML=dias[n.getDay()]+" "+n.getDate()+" "+mes[n.getMonth()];
+  var h=n.getHours(); var app=$("app");
+  if(h>=0&&h<7){ app.className="night"; } else { app.className=""; }
+}
+
+function renderCalendar(){
+  var y=viewMonth.getFullYear(), m=viewMonth.getMonth();
+  var mes=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+  $("calTitle").innerHTML=mes[m]+" "+y;
+  var events=(DATA.calendar&&DATA.calendar.events)||[];
+  var has={}; var i; for(i=0;i<events.length;i++){ has[events[i].date]=1; }
+  var first=new Date(y,m,1); var startIdx=(first.getDay()+6)%7;
+  var dim=new Date(y,m+1,0).getDate(); var todayStr=ymd(new Date());
+  var html="<tr>", col=0, day=1, ds, cls;
+  for(i=0;i<startIdx;i++){ html+="<td></td>"; col++; }
+  for(day=1;day<=dim;day++){
+    if(col===7){ html+="</tr><tr>"; col=0; }
+    ds=y+"-"+pad(m+1)+"-"+pad(day);
+    cls=""; if(ds===todayStr) cls+="today "; if(ds===selDay) cls+="sel ";
+    html+='<td class="'+cls+'">'+day+(has[ds]?'<span class="dot"></span>':'')+'</td>';
+    col++;
+  }
+  while(col<7&&col>0){ html+="<td></td>"; col++; }
+  html+="</tr>";
+  $("calBody").innerHTML=html;
+}
+
+function moveSel(delta){
+  var base=selDay?new Date(selDay+"T00:00:00"):new Date();
+  base.setDate(base.getDate()+delta);
+  if(base.getMonth()!==viewMonth.getMonth()||base.getFullYear()!==viewMonth.getFullYear()){
+    viewMonth=new Date(base.getFullYear(),base.getMonth(),1); refresh();
+  }
+  selDay=ymd(base); renderCalendar();
+}
+
+/* ===== Datos ===== */
+function refresh(){
+  var month=ymd(viewMonth).substring(0,7);
+  xhr("GET", CFG.READ_URL+"?token="+encodeURIComponent(CFG.TOKEN)+"&month="+month, null, function(err,j){
+    if(err||!j||j.error){ $("offline").style.display="block"; return; }
+    DATA=j; $("offline").style.display="none";
+    renderWeather(); renderRaces(); renderShop(); renderCalendar();
+  });
+}
+
+/* ===== Modal del día ===== */
+function openDay(date){
+  var events=(DATA.calendar&&DATA.calendar.events)||[], evs=[], i;
+  for(i=0;i<events.length;i++){ if(events[i].date===date) evs.push(events[i]); }
+  evs.sort(function(a,b){ return (a.time||"").localeCompare(b.time||""); });
+  var pretty=date, html='<h2>'+pretty+'</h2>';
+  if(evs.length){ for(i=0;i<evs.length;i++){
+    html+='<div class="evt"><span>'+(evs[i].type==="cita"&&evs[i].time?esc(evs[i].time)+" - ":"")+esc(evs[i].text)+'</span>'
+      +'<button data-del="'+esc(evs[i].id)+'">Borrar</button></div>';
+  }} else { html+='<div class="hint">Sin notas ni citas</div>'; }
+  html+='<div class="frm"><select id="evType"><option value="nota">Nota</option><option value="cita">Cita</option></select>'
+    +'<input id="evTime" placeholder="hh:mm" style="width:120px"><input id="evText" class="t" placeholder="Escribe aqui..."> '
+    +'<button id="evAdd">Anadir</button></div>'
+    +'<div class="hint">Pulsa ATRAS en el mando para cerrar</div>';
+  $("modalBox").innerHTML=html;
+  $("modal").className="show";
+  var txt=$("evText"); if(txt) txt.focus();
+  $("evAdd").onclick=function(){
+    var t=$("evText").value; if(!t||!t.replace(/^\s+|\s+$/g,"")) return;
+    save({action:"add",date:date,type:$("evType").value,time:$("evTime").value||null,
+      text:t.replace(/^\s+|\s+$/g,""),createdBy:"tv"}, function(){ openDay(date); });
+  };
+  var dels=$("modalBox").getElementsByTagName("button"), k;
+  for(k=0;k<dels.length;k++){ (function(btn){
+    var id=btn.getAttribute("data-del"); if(!id) return;
+    btn.onclick=function(){ save({action:"delete",id:id}, function(){ openDay(date); }); };
+  })(dels[k]); }
+}
+function closeDay(){ $("modal").className=""; }
+function save(payload, done){
+  xhr("POST", CFG.WRITE_URL+"?token="+encodeURIComponent(CFG.TOKEN), JSON.stringify(payload), function(){
+    refresh(); if(done) setTimeout(done, 400);
+  });
+}
+
+/* ===== Teclas del mando ===== */
+document.addEventListener("keydown", function(e){
+  var k=e.keyCode;
+  if($("modal").className==="show"){ if(k===461||k===27){ e.preventDefault(); closeDay(); } return; }
+  if(k===37){ e.preventDefault(); moveSel(-1); }
+  else if(k===39){ e.preventDefault(); moveSel(1); }
+  else if(k===38){ e.preventDefault(); moveSel(-7); }
+  else if(k===40){ e.preventDefault(); moveSel(7); }
+  else if(k===13){ e.preventDefault(); if(selDay) openDay(selDay); }
+});
+window.addEventListener("resize", fitScale);
+
+/* ===== Arranque ===== */
+function init(){
+  try{ $("ua").innerHTML=esc(navigator.userAgent); }catch(e){}
+  fitScale();
+  renderClock(); renderCalendar();
+  refresh();
+  setInterval(renderClock, 1000);
+  setInterval(refresh, CFG.REFRESH_MS);
+  $("prev").onclick=function(){ viewMonth.setMonth(viewMonth.getMonth()-1); refresh(); renderCalendar(); };
+  $("next").onclick=function(){ viewMonth.setMonth(viewMonth.getMonth()+1); refresh(); renderCalendar(); };
+}
+if(document.readyState==="complete"||document.readyState==="interactive") init();
+else document.addEventListener("DOMContentLoaded", init);
+</script>
 </body>
 </html>
