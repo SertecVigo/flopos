@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1920, height=1080, initial-scale=1">
+<title>FlopTV Probe</title>
+<!--
+  SONDA DE DIAGNOSTICO - Fase 0 de FlopTV.
+  OBJETIVO: medir en la TV real (webOS ~3.x / Chrome 38) lo que no se puede
+  saber desde la oficina, porque la tele esta en otra red y no hay SSH.
+
+  REGLAS DEL CODIGO (Chrome 38, verificado en el proyecto Panel Familiar):
+    - ES5 puro: solo var, function, sin arrow, sin template literals, sin
+      const/let, sin async/await, sin fetch, sin optional chaining.
+    - CSS: flexbox si; NO grid, NO var(), NO inset, NO aspect-ratio.
+      Posicionamiento con top/left/right/bottom explicitos y colores literales.
+    - Red: XMLHttpRequest. El elemento <video> NO esta sujeto a CORS, por eso
+      las pruebas de reproduccion funcionan aunque las de catalogo fallen.
+-->
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0b1020; color: #e8ebff;
+    font-family: "LG Smart UI", "Segoe UI", Arial, sans-serif;
+  }
+  .screen {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    display: none; padding: 48px 64px;
+  }
+  .screen.on { display: block; }
+
+  h1 { font-size: 46px; font-weight: 800; margin-bottom: 6px; }
+  h1 span { color: #7c5cff; }
+  .sub { font-size: 24px; color: #8b93c2; margin-bottom: 34px; }
+
+  /* ---- pantalla de configuracion ---- */
+  .field { margin-bottom: 22px; }
+  .label { font-size: 22px; color: #8b93c2; margin-bottom: 8px; }
+  .box {
+    width: 900px; height: 66px; line-height: 66px;
+    background: #151b3d; border: 3px solid #2a3161; border-radius: 10px;
+    font-size: 26px; color: #e8ebff; padding: 0 20px;
+  }
+  input.box { line-height: normal; }
+  .btn {
+    display: inline-block; height: 66px; line-height: 60px;
+    padding: 0 40px; margin-right: 20px;
+    background: #151b3d; border: 3px solid #2a3161; border-radius: 10px;
+    font-size: 26px; font-weight: 700; color: #e8ebff;
+  }
+  .focus { border-color: #7c5cff; background: #21285a; }
+  .hint { margin-top: 26px; font-size: 21px; color: #6c74a3; line-height: 1.6; }
+
+  /* ---- pantalla de progreso ---- */
+  .step { font-size: 27px; margin-bottom: 16px; color: #6c74a3; }
+  .step.doing { color: #e8ebff; }
+  .step.done  { color: #6ee7a8; }
+  .step.fail  { color: #ff8f8f; }
+  .step b { display: inline-block; width: 42px; }
+
+  /* ---- informe ---- */
+  #report { padding: 34px 56px; overflow: hidden; }
+  #report h1 { font-size: 38px; margin-bottom: 18px; }
+  .cols { display: flex; }
+  .col { width: 50%; padding-right: 34px; }
+  .card {
+    background: #131934; border: 2px solid #262e5c; border-radius: 12px;
+    padding: 16px 20px; margin-bottom: 14px;
+  }
+  .card h2 { font-size: 22px; color: #7c5cff; margin-bottom: 10px; letter-spacing: 1px; }
+  .row { font-size: 20px; line-height: 1.55; }
+  .row i { font-style: normal; color: #8b93c2; display: inline-block; width: 250px; }
+  .ok   { color: #6ee7a8; }
+  .bad  { color: #ff8f8f; }
+  .warn { color: #ffd479; }
+  .foot { position: absolute; left: 56px; bottom: 22px; font-size: 20px; color: #6c74a3; }
+
+  /* El video vive fuera de pantalla: solo interesan sus tiempos, no verlo. */
+  #v { position: absolute; left: -4000px; top: 0; width: 640px; height: 360px; }
+</style>
+</head>
+<body>
+
+<!-- ============ 1. CONFIGURACION ============ -->
+<div id="setup" class="screen on">
+  <h1>FlopTV <span>Probe</span></h1>
+  <div class="sub">Diagnostico de la tele antes de construir la app. Tarda unos 2 minutos.</div>
+
+  <div class="field">
+    <div class="label">Servidor (host y puerto, tal cual te lo dio el proveedor)</div>
+    <input id="f_host" class="box" type="text" placeholder="http://miservidor.com:8080">
+  </div>
+  <div class="field">
+    <div class="label">Usuario</div>
+    <input id="f_user" class="box" type="text">
+  </div>
+  <div class="field">
+    <div class="label">Contrasena</div>
+    <input id="f_pass" class="box" type="text">
+  </div>
+
+  <div style="margin-top:30px">
+    <div id="b_go" class="btn">Empezar diagnostico</div>
+    <div id="b_clear" class="btn">Borrar datos</div>
+  </div>
+
+  <div id="setup_err" class="hint bad" style="display:none"></div>
+
+  <div class="hint">
+    Flechas para moverte &middot; OK para escribir o pulsar el boton &middot; ATRAS para cerrar el teclado.<br>
+    Los datos se guardan solo en esta tele (localStorage). No se envian a ningun sitio.
+  </div>
+</div>
+
+<!-- ============ 2. EJECUCION ============ -->
+<div id="running" class="screen">
+  <h1>Midiendo<span>...</span></h1>
+  <div class="sub">No cambies de app ni apagues la tele.</div>
+  <div id="steps"></div>
+</div>
+
+<!-- ============ 3. INFORME ============ -->
+<div id="report" class="screen">
+  <h1>Informe <span>FlopTV</span></h1>
+  <div class="cols">
+    <div class="col" id="colA"></div>
+    <div class="col" id="colB"></div>
+  </div>
+  <div class="foot">Haz una foto de esta pantalla &middot; OK para repetir &middot; ATRAS para salir</div>
+</div>
+
+<video id="v" preload="none"></video>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   Utilidades basicas (ES5)
+   ===================================================================== */
+
+function $(id) { return document.getElementById(id); }
+
+function now() {
+  // performance.now existe en Chrome 38, pero no damos nada por hecho.
+  if (window.performance && window.performance.now) return window.performance.now();
+  return new Date().getTime();
+}
+
+function show(id) {
+  var s = document.querySelectorAll(".screen");
+  for (var i = 0; i < s.length; i++) s[i].className = "screen";
+  $(id).className = "screen on";
+}
+
+function isOn(id) { return $(id).className === "screen on"; }
+
+function esc(t) {
+  return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function store(k, v) {
+  try {
+    if (v === undefined) return localStorage.getItem(k);
+    localStorage.setItem(k, v);
+  } catch (e) { return null; }
+}
+
+/* Normaliza lo que escriba el usuario: anade http:// si falta y quita la barra final. */
+function normHost(h) {
+  h = String(h || "").replace(/^\s+|\s+$/g, "");
+  if (h && !/^https?:\/\//i.test(h)) h = "http://" + h;
+  return h.replace(/\/+$/, "");
+}
+
+/* =====================================================================
+   Navegacion con el mando
+   Foco propio con una clase CSS: :focus real es caro y poco fiable aqui.
+   ===================================================================== */
+
+var KEY = { LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461 };
+
+var setupItems = ["f_host", "f_user", "f_pass", "b_go", "b_clear"];
+var focusIdx = 0;
+var typing = false;   // true mientras el teclado virtual esta abierto
+
+function paintFocus() {
+  for (var i = 0; i < setupItems.length; i++) {
+    var el = $(setupItems[i]);
+    var base = el.className.replace(/\s*focus\s*/g, "");
+    el.className = (i === focusIdx) ? base + " focus" : base;
+  }
+}
+
+function moveFocus(d) {
+  focusIdx += d;
+  if (focusIdx < 0) focusIdx = setupItems.length - 1;
+  if (focusIdx >= setupItems.length) focusIdx = 0;
+  paintFocus();
+}
+
+function activate() {
+  var id = setupItems[focusIdx];
+  if (id === "b_go") return startRun();
+  if (id === "b_clear") {
+    store("floptv_host", ""); store("floptv_user", ""); store("floptv_pass", "");
+    $("f_host").value = ""; $("f_user").value = ""; $("f_pass").value = "";
+    return;
+  }
+  // Es un input: darle foco real abre el teclado virtual de webOS.
+  typing = true;
+  $(id).focus();
+}
+
+// El teclado virtual se traga los keydown, asi que no siempre vemos el ATRAS
+// que lo cierra. El blur del input si llega, y es la senal fiable.
+(function bindBlur() {
+  var ids = ["f_host", "f_user", "f_pass"];
+  for (var i = 0; i < ids.length; i++) {
+    $(ids[i]).addEventListener("blur", function () { typing = false; }, false);
+  }
+})();
+
+document.addEventListener("keydown", function (e) {
+  var k = e.keyCode;
+
+  if (typing) {
+    // Con el teclado abierto solo nos interesa saber cuando se cierra.
+    if (k === KEY.BACK || k === KEY.OK) {
+      typing = false;
+      try { document.activeElement.blur(); } catch (err) {}
+      e.preventDefault();
+    }
+    return;
+  }
+
+  if (isOn("report")) {
+    if (k === KEY.OK) { show("setup"); paintFocus(); }
+    return;
+  }
+  if (!isOn("setup")) return;   // durante la ejecucion no se navega
+
+  if (k === KEY.UP)   { moveFocus(-1); e.preventDefault(); }
+  if (k === KEY.DOWN) { moveFocus(1);  e.preventDefault(); }
+  if (k === KEY.LEFT  && focusIdx === 4) { moveFocus(-1); e.preventDefault(); }
+  if (k === KEY.RIGHT && focusIdx === 3) { moveFocus(1);  e.preventDefault(); }
+  if (k === KEY.OK)   { activate(); e.preventDefault(); }
+}, false);
+
+/* =====================================================================
+   Resultado acumulado
+   ===================================================================== */
+
+var R = { sys: {}, codecs: {}, cat: {}, play: {} };
+var CFG = { host: "", user: "", pass: "" };
+
+/* ---- pasos visibles en pantalla ---- */
+var stepEls = {};
+function addStep(key, text) {
+  var d = document.createElement("div");
+  d.className = "step";
+  d.innerHTML = "<b>&middot;</b>" + esc(text);
+  d.setAttribute("data-text", text);
+  $("steps").appendChild(d);
+  stepEls[key] = d;
+}
+function markStep(key, state, extra) {
+  var d = stepEls[key];
+  if (!d) return;
+  var mark = state === "done" ? "&#10003;" : (state === "fail" ? "&#10007;" : "&#8250;");
+  d.className = "step " + state;
+  d.innerHTML = "<b>" + mark + "</b>" + esc(d.getAttribute("data-text")) +
+                (extra ? "  &mdash;  " + esc(extra) : "");
+}
+
+/* =====================================================================
+   BLOQUE 1 - Sistema
+   ===================================================================== */
+
+function testSystem(done) {
+  markStep("sys", "doing");
+  var s = R.sys;
+
+  s.ua = navigator.userAgent;
+  s.screen = screen.width + "x" + screen.height;
+  s.window = window.innerWidth + "x" + window.innerHeight;
+  s.dpr = window.devicePixelRatio || 1;
+  s.lang = navigator.language || "?";
+
+  // Version de Chrome: delata la generacion de webOS mejor que nada.
+  var m = /Chrome\/(\d+)/.exec(s.ua);
+  s.chrome = m ? parseInt(m[1], 10) : 0;
+  var w = /Web[O0]S|webOS/i.test(s.ua) ? "si" : "no";
+  s.isWebOS = w;
+
+  // Memoria JS (no estandar, pero Chromium la expone).
+  if (window.performance && window.performance.memory) {
+    s.heapLimitMB = Math.round(window.performance.memory.jsHeapSizeLimit / 1048576);
+    s.heapUsedMB  = Math.round(window.performance.memory.usedJSHeapSize / 1048576);
+  }
+
+  // Modelo y firmware via Luna API. Es lo unico que dice si la tele es UHD,
+  // y por tanto si puede decodificar HEVC. Si falla, seguimos sin drama.
+  var settled = false;
+  function finish() { if (!settled) { settled = true; markStep("sys", "done", s.chrome ? "Chrome " + s.chrome : ""); done(); } }
+
+  try {
+    var bridge = new PalmServiceBridge();
+    bridge.onservicecallback = function (msg) {
+      try {
+        var r = JSON.parse(msg);
+        s.modelName = r.modelName;
+        s.firmware = r.firmwareVersion;
+        s.uhd = r.UHD;
+        s.sdk = r.sdkVersion;
+      } catch (e) { s.lunaError = "respuesta ilegible"; }
+      finish();
+    };
+    bridge.call(
+      "luna://com.webos.service.tv.systemproperty/getSystemInfo",
+      JSON.stringify({ keys: ["modelName", "firmwareVersion", "UHD", "sdkVersion"] })
+    );
+    setTimeout(finish, 3000);   // la Luna API puede no contestar nunca
+  } catch (e) {
+    s.lunaError = "PalmServiceBridge no disponible";
+    finish();
+  }
+}
+
+/* =====================================================================
+   BLOQUE 2 - Codecs
+   Lo que el decodificador dice soportar. canPlayType miente a veces,
+   pero un "" rotundo es una respuesta fiable de que NO.
+   ===================================================================== */
+
+var CODECS = [
+  ["TS (MPEG-TS)",      "video/mp2t"],
+  ["HLS (m3u8)",        "application/vnd.apple.mpegurl"],
+  ["HLS (x-mpegurl)",   "application/x-mpegurl"],
+  ["H.264 High@L4.0",   'video/mp4; codecs="avc1.640028"'],
+  ["H.264 Main@L3.1",   'video/mp4; codecs="avc1.4d401f"'],
+  ["HEVC / H.265",      'video/mp4; codecs="hev1.1.6.L93.B0"'],
+  ["HEVC (hvc1)",       'video/mp4; codecs="hvc1.1.6.L93.B0"'],
+  ["AAC",               'audio/mp4; codecs="mp4a.40.2"'],
+  ["AC3 (Dolby)",       'audio/mp4; codecs="ac-3"'],
+  ["EAC3 (Dolby+)",     'audio/mp4; codecs="ec-3"'],
+  ["MP3",               "audio/mpeg"]
+];
+
+function testCodecs(done) {
+  markStep("cod", "doing");
+  var v = $("v"), yes = 0;
+  for (var i = 0; i < CODECS.length; i++) {
+    var res = "";
+    try { res = v.canPlayType(CODECS[i][1]); } catch (e) { res = "error"; }
+    R.codecs[CODECS[i][0]] = res || "no";
+    if (res === "probably" || res === "maybe") yes++;
+  }
+  markStep("cod", "done", yes + "/" + CODECS.length + " soportados");
+  done();
+}
+
+/* =====================================================================
+   BLOQUE 3 - Catalogo
+   Mide por separado descarga y JSON.parse: en Chrome 38 el parseo de varios
+   MB es lo que congela la interfaz, y es el numero que decide como trocear.
+   ===================================================================== */
+
+function api(action) {
+  return CFG.host + "/player_api.php?username=" + encodeURIComponent(CFG.user) +
+         "&password=" + encodeURIComponent(CFG.pass) + "&action=" + action;
+}
+
+function measure(action, label, cb) {
+  var out = { action: action, label: label };
+  var xhr = new XMLHttpRequest();
+  var t0 = now();
+
+  xhr.open("GET", api(action), true);
+  xhr.timeout = 45000;
+
+  xhr.onload = function () {
+    var t1 = now();
+    out.status = xhr.status;
+    var txt = xhr.responseText || "";
+    out.kb = Math.round(txt.length / 1024);
+    out.downloadMs = Math.round(t1 - t0);
+
+    var t2 = now();
+    try {
+      var data = JSON.parse(txt);
+      out.parseMs = Math.round(now() - t2);
+      out.items = (data && data.length !== undefined) ? data.length : -1;
+      out.sample = data;
+    } catch (e) {
+      out.parseMs = Math.round(now() - t2);
+      out.error = "JSON invalido";
+    }
+    cb(out);
+  };
+  // Un XHR bloqueado por CORS llega aqui con status 0: no se distingue de
+  // "sin red" desde JS, asi que lo dejamos anotado como ambiguo.
+  xhr.onerror = function () {
+    out.downloadMs = Math.round(now() - t0);
+    out.error = "fallo de red o CORS (status 0)";
+    cb(out);
+  };
+  xhr.ontimeout = function () {
+    out.downloadMs = Math.round(now() - t0);
+    out.error = "timeout 45s";
+    cb(out);
+  };
+
+  try { xhr.send(); } catch (e) { out.error = "send fallo: " + e.message; cb(out); }
+}
+
+var CAT_TESTS = [
+  ["get_live_categories", "Categorias directo"],
+  ["get_live_streams",    "Canales directo"],
+  ["get_vod_streams",     "Peliculas"],
+  ["get_series",          "Series"]
+];
+
+function testCatalog(done) {
+  markStep("cat", "doing");
+  var i = 0;
+  R.cat.tests = [];
+
+  function next() {
+    if (i >= CAT_TESTS.length) {
+      var live = R.cat.tests[1];
+      var ok = live && !live.error;
+      markStep("cat", ok ? "done" : "fail",
+               ok ? live.items + " canales, " + live.kb + " KB, parseo " + live.parseMs + " ms"
+                  : (live ? live.error : "sin datos"));
+      return done();
+    }
+    var t = CAT_TESTS[i];
+    markStep("cat", "doing", t[1] + "...");
+    measure(t[0], t[1], function (out) {
+      // El primer canal de la lista alimenta las pruebas de reproduccion.
+      if (out.action === "get_live_streams" && out.sample && out.sample.length) {
+        R.cat.firstStreamId = out.sample[0].stream_id;
+        R.cat.firstStreamName = out.sample[0].name;
+      }
+      delete out.sample;   // no guardamos el catalogo entero en el informe
+      R.cat.tests.push(out);
+      i++; next();
+    });
+  }
+  next();
+}
+
+/* =====================================================================
+   BLOQUE 4 - Reproduccion
+   La prueba que de verdad importa: .ts (lo que usa MaxPlayer por defecto)
+   contra .m3u8 servido al pipeline nativo con mediaOption.
+   ===================================================================== */
+
+var PLAY_SECONDS = 25;
+
+function playTest(kind, cb) {
+  var id = R.cat.firstStreamId;
+  var out = { kind: kind };
+  if (!id) { out.error = "sin canal de prueba"; return cb(out); }
+
+  var v = $("v");
+  var url = CFG.host + "/live/" + encodeURIComponent(CFG.user) + "/" +
+            encodeURIComponent(CFG.pass) + "/" + id + (kind === "hls" ? ".m3u8" : ".ts");
+
+  // Un unico <video> reutilizado: crear y destruir el elemento reinicia el
+  // pipeline nativo de webOS y cuesta segundos.
+  while (v.firstChild) v.removeChild(v.firstChild);
+
+  var src = document.createElement("source");
+  src.setAttribute("src", url);
+
+  if (kind === "hls") {
+    var opts = {
+      mediaTransportType: "HLS",
+      option: {
+        adaptiveStreaming: {
+          adaptiveResolution: true,
+          seamlessPlay: true,
+          maxWidth: 1920,
+          maxHeight: 1080,
+          bps: { start: 2000000 }
+        }
+      }
+    };
+    src.setAttribute("type",
+      "application/vnd.apple.mpegurl;mediaOption=" + encodeURI(JSON.stringify(opts)));
+  } else {
+    src.setAttribute("type", "video/mp2t");
+  }
+  v.appendChild(src);
+
+  var t0 = now(), waits = 0, ended = false;
+  out.firstFrameMs = -1;
+  out.metadataMs = -1;
+
+  function onMeta()  { if (out.metadataMs < 0) out.metadataMs = Math.round(now() - t0); }
+  function onWait()  { waits++; }
+  function onTime()  { if (out.firstFrameMs < 0 && v.currentTime > 0) out.firstFrameMs = Math.round(now() - t0); }
+  function onErr()   {
+    var e = v.error;
+    out.error = "error de reproduccion" + (e ? " (code " + e.code + ")" : "");
+    finish();
+  }
+
+  v.addEventListener("loadedmetadata", onMeta, false);
+  v.addEventListener("waiting", onWait, false);
+  v.addEventListener("timeupdate", onTime, false);
+  v.addEventListener("error", onErr, true);
+
+  function finish() {
+    if (ended) return;
+    ended = true;
+    out.rebuffers = waits;
+    out.playedSec = Math.round(v.currentTime * 10) / 10;
+
+    v.removeEventListener("loadedmetadata", onMeta, false);
+    v.removeEventListener("waiting", onWait, false);
+    v.removeEventListener("timeupdate", onTime, false);
+    v.removeEventListener("error", onErr, true);
+
+    try { v.pause(); } catch (e) {}
+    while (v.firstChild) v.removeChild(v.firstChild);
+    try { v.load(); } catch (e) {}
+
+    cb(out);
+  }
+
+  try { v.load(); v.play(); } catch (e) { out.error = "play() fallo: " + e.message; return finish(); }
+  setTimeout(finish, PLAY_SECONDS * 1000);
+}
+
+function testPlayback(done) {
+  markStep("play", "doing", "HLS (.m3u8), " + PLAY_SECONDS + "s...");
+  playTest("hls", function (hls) {
+    R.play.hls = hls;
+    markStep("play", "doing", "TS (.ts), " + PLAY_SECONDS + "s...");
+    playTest("ts", function (ts) {
+      R.play.ts = ts;
+      var best = (hls.firstFrameMs > 0 && (ts.firstFrameMs < 0 || hls.firstFrameMs <= ts.firstFrameMs)) ? "HLS" : "TS";
+      var any = hls.firstFrameMs > 0 || ts.firstFrameMs > 0;
+      markStep("play", any ? "done" : "fail", any ? "mejor: " + best : "ningun formato arranco");
+      done();
+    });
+  });
+}
+
+/* =====================================================================
+   Orquestacion
+   ===================================================================== */
+
+function startRun() {
+  CFG.host = normHost($("f_host").value);
+  CFG.user = $("f_user").value.replace(/^\s+|\s+$/g, "");
+  CFG.pass = $("f_pass").value.replace(/^\s+|\s+$/g, "");
+
+  var err = $("setup_err");
+  if (!CFG.host || !CFG.user || !CFG.pass) {
+    err.innerHTML = "Faltan datos: rellena servidor, usuario y contrasena.";
+    err.style.display = "block";
+    return;
+  }
+  err.style.display = "none";
+  store("floptv_host", CFG.host);
+  store("floptv_user", CFG.user);
+  store("floptv_pass", CFG.pass);
+
+  R = { sys: {}, codecs: {}, cat: {}, play: {}, startedAt: new Date().toString() };
+  $("steps").innerHTML = "";
+  stepEls = {};
+  addStep("sys",  "Sistema: modelo, firmware, resolucion");
+  addStep("cod",  "Codecs soportados por el decodificador");
+  addStep("cat",  "Catalogo: descarga y parseo");
+  addStep("play", "Reproduccion: HLS frente a TS");
+  show("running");
+
+  testSystem(function () {
+    testCodecs(function () {
+      testCatalog(function () {
+        testPlayback(function () {
+          render();
+          show("report");
+        });
+      });
+    });
+  });
+}
+
+/* =====================================================================
+   Informe
+   ===================================================================== */
+
+function line(k, v, cls) {
+  return '<div class="row"><i>' + esc(k) + '</i>' +
+         '<span class="' + (cls || "") + '">' + esc(v) + "</span></div>";
+}
+
+function render() {
+  var s = R.sys, h = "";
+
+  /* --- columna izquierda --- */
+  h += '<div class="card"><h2>SISTEMA</h2>';
+  h += line("Modelo", s.modelName || "no disponible");
+  h += line("Firmware", s.firmware || "no disponible");
+  h += line("Ultra HD (HEVC)", s.uhd === undefined ? "no disponible" : String(s.uhd),
+            s.uhd === true || s.uhd === "true" ? "ok" : "warn");
+  h += line("Motor", "Chrome " + (s.chrome || "?"), s.chrome && s.chrome < 50 ? "warn" : "ok");
+  h += line("Pantalla", s.screen + "  (ventana " + s.window + ")");
+  if (s.heapLimitMB) h += line("Memoria JS", s.heapUsedMB + " / " + s.heapLimitMB + " MB");
+  h += "</div>";
+
+  h += '<div class="card"><h2>CODECS</h2>';
+  for (var k in R.codecs) {
+    if (!R.codecs.hasOwnProperty(k)) continue;
+    var val = R.codecs[k];
+    var cls = (val === "probably") ? "ok" : (val === "maybe" ? "warn" : "bad");
+    h += line(k, val, cls);
+  }
+  h += "</div>";
+  $("colA").innerHTML = h;
+
+  /* --- columna derecha --- */
+  h = '<div class="card"><h2>CATALOGO</h2>';
+  var t = R.cat.tests || [];
+  for (var i = 0; i < t.length; i++) {
+    var x = t[i];
+    if (x.error) {
+      h += line(x.label, x.error, "bad");
+    } else {
+      h += line(x.label, x.items + " items &middot; " + x.kb + " KB &middot; red " +
+                x.downloadMs + " ms &middot; parseo " + x.parseMs + " ms",
+                x.parseMs > 1500 ? "bad" : (x.parseMs > 500 ? "warn" : "ok"));
+    }
+  }
+  h += "</div>";
+
+  h += '<div class="card"><h2>REPRODUCCION</h2>';
+  h += line("Canal de prueba", R.cat.firstStreamName || "ninguno");
+  var kinds = [["HLS (.m3u8)", R.play.hls], ["TS (.ts)", R.play.ts]];
+  for (var j = 0; j < kinds.length; j++) {
+    var p = kinds[j][1];
+    if (!p) { h += line(kinds[j][0], "no ejecutado", "bad"); continue; }
+    if (p.error) { h += line(kinds[j][0], p.error, "bad"); continue; }
+    if (p.firstFrameMs < 0) { h += line(kinds[j][0], "no arranco en " + PLAY_SECONDS + "s", "bad"); continue; }
+    h += line(kinds[j][0],
+              "1er frame " + p.firstFrameMs + " ms &middot; " + p.playedSec + "s reproducidos &middot; " +
+              p.rebuffers + " cortes",
+              p.rebuffers === 0 ? "ok" : (p.rebuffers < 3 ? "warn" : "bad"));
+  }
+  h += "</div>";
+
+  h += '<div class="card"><h2>USER AGENT</h2><div class="row" style="font-size:17px">' +
+       esc(s.ua) + "</div></div>";
+  $("colB").innerHTML = h;
+}
+
+/* =====================================================================
+   Arranque
+   ===================================================================== */
+
+(function init() {
+  $("f_host").value = store("floptv_host") || "";
+  $("f_user").value = store("floptv_user") || "";
+  $("f_pass").value = store("floptv_pass") || "";
+  paintFocus();
+})();
+</script>
+</body>
+</html>
