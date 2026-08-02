@@ -384,6 +384,19 @@ function stopWatchdog() {
   if (PLAY.timer) { clearTimeout(PLAY.timer); PLAY.timer = null; }
 }
 
+/* Al salir de TV se corta del todo: no tiene sentido seguir sonando un canal
+   mientras miras peliculas, y ademas libera la unica conexion de la cuenta
+   para que la pelicula que elijas pueda abrirse. */
+function stopPlayback() {
+  stopWatchdog();
+  var v = $("video");
+  try { v.pause(); } catch (e) {}
+  try { v.removeAttribute("src"); v.load(); } catch (e2) {}
+  PLAY.id = null; PLAY.url = null; PLAY.tries = 0;
+  UI.playingId = null;
+  setStatus("");
+}
+
 /* Los ids se manejan como cadena: la API los da numericos y localStorage los
    devuelve como texto, y comparar 184 !== "184" reproducia dos veces. */
 function playUrl(id, url, name) {
@@ -403,27 +416,18 @@ function playChannel(id, name) {
   playUrl(id, liveUrl(id), name);
 }
 
-/* El tipo debe corresponder al contenedor real o el pipeline lo rechaza.
-   El 98% de las peliculas de este proveedor son .mkv, no .ts. */
-function mimeFor(url) {
-  var m = /\.([a-z0-9]+)(\?|$)/i.exec(String(url));
-  var ext = m ? m[1].toLowerCase() : "";
-  if (ext === "ts")  return "video/mp2t";
-  if (ext === "mkv") return "video/x-matroska";
-  if (ext === "avi") return "video/x-msvideo";
-  if (ext === "mov") return "video/quicktime";
-  return "video/mp4";                       // mp4, m4v y cualquier otro
-}
-
+/* 🚨 NO se usa <source type="...">. Chrome 38 consulta canPlayType con ese
+   tipo y descarta la fuente sin intentarlo si no lo reconoce. El 98% de las
+   peliculas son .mkv y canPlayType("video/x-matroska") devuelve "", asi que
+   con <source type> ninguna pelicula llegaba a reproducirse. Poniendo el src
+   directamente en el <video>, el pipeline nativo de webOS decide, y ese si
+   sabe abrir matroska. */
 function startStream() {
   var v = $("video");
   stopWatchdog();
 
   while (v.firstChild) v.removeChild(v.firstChild);
-  var src = document.createElement("source");
-  src.setAttribute("src", PLAY.url);
-  src.setAttribute("type", mimeFor(PLAY.url));
-  v.appendChild(src);
+  v.setAttribute("src", PLAY.url);
 
   PLAY.lastTime = -1;
   PLAY.stalls = 0;
@@ -497,7 +501,18 @@ function buildGrid() {
     d.style.left = ((i % GCOLS) * 240) + "px";
     d.style.top  = (Math.floor(i / GCOLS) * 356) + "px";
     d.innerHTML = '<img alt=""><div class="t"></div>';
+    d._idx = undefined;
     g.appendChild(d);
+  }
+}
+
+/* Al cambiar de lista los indices se repiten pero el contenido es otro, asi
+   que hay que invalidar el cache de celdas o se quedarian caratulas viejas. */
+function resetGrid() {
+  var cells = $("grid").childNodes;
+  for (var i = 0; i < cells.length; i++) {
+    cells[i]._idx = undefined;
+    cells[i].childNodes[0].removeAttribute("src");
   }
 }
 
@@ -563,36 +578,49 @@ function renderGrid() {
   topRow = clampTop(topRow, row, Math.ceil(total / GCOLS), GROWS);
   UI.itemTop = topRow * GCOLS;
 
+  /* Solo se toca la celda que REALMENTE cambia de contenido. Al moverse
+     dentro de la fila visible las celdas siguen mostrando lo mismo y unicamente
+     se mueve el borde de foco: reescribirlas todas hacia parpadear las
+     caratulas en cada pulsacion. */
   var cells = $("grid").childNodes;
+  var cambios = false;
   for (var i = 0; i < GCELLS; i++) {
     var idx = UI.itemTop + i, cell = cells[i];
     var img = cell.childNodes[0], txt = cell.childNodes[1];
+
     if (idx >= total) {
-      cell.style.display = "none";
-      img.removeAttribute("src");
+      if (cell._idx !== -1) { cell._idx = -1; cell.style.display = "none"; img.removeAttribute("src"); }
       continue;
     }
-    cell.style.display = "block";
-    var it = DATA.view[idx];
-    txt.innerHTML = esc(cut(it.name, 46));
+    if (cell._idx !== idx) {
+      cell._idx = idx;
+      cell.style.display = "block";
+      txt.innerHTML = esc(cut(DATA.view[idx].name, 46));
+      img.removeAttribute("src");     // esta celda va a mostrar otra cosa
+      cambios = true;
+    }
     cell.className = "cell" + (idx === UI.itemIdx ? " cur" : "");
-    img.removeAttribute("src");        // libera la imagen anterior
   }
 
-  if (UI.imgTimer) clearTimeout(UI.imgTimer);
-  UI.imgTimer = setTimeout(loadGridImages, 280);
+  if (cambios) {
+    if (UI.imgTimer) clearTimeout(UI.imgTimer);
+    UI.imgTimer = setTimeout(loadGridImages, 280);
+  }
   paintDetail();
 }
 
+/* Solo pide las imagenes que faltan: si la celda ya tiene su caratula puesta,
+   volver a asignar src la haria recargar y parpadear. */
 function loadGridImages() {
   var cells = $("grid").childNodes;
   for (var i = 0; i < GCELLS; i++) {
-    var idx = UI.itemTop + i;
-    if (idx >= DATA.view.length) continue;
+    var cell = cells[i], idx = cell._idx;
+    if (idx === undefined || idx < 0 || idx >= DATA.view.length) continue;
+    var img = cell.childNodes[0];
+    if (img.getAttribute("src")) continue;
     var it = DATA.view[idx];
     var url = it.stream_icon || it.cover || "";
-    if (!url) continue;
-    cells[i].childNodes[0].src = url;
+    if (url) img.setAttribute("src", url);
   }
 }
 
@@ -659,6 +687,7 @@ function selectCategory(idx) {
 
   UI.itemIdx = 0;
   UI.itemTop = 0;
+  resetGrid();
   renderCats();
   renderContent();
 }
@@ -707,11 +736,20 @@ function ensureSection(sec, cb) {
 }
 
 function switchSection(sec) {
+  // Se corta ANTES de cargar: mientras se bajan 21 MB de peliculas no debe
+  // seguir sonando un canal de fondo, y la conexion queda libre.
+  if (sec !== SEC.TV) stopPlayback();
+
   ensureSection(sec, function (err) {
     if (err) {
       show("browse");
       setStatus("No se pudo cargar: " + err);
       return;
+    }
+    // Al volver a TV se recupera el ultimo canal que se estaba viendo.
+    if (sec === SEC.TV && !PLAY.id) {
+      var last = store("floptv_last");
+      if (last) playChannel(last, "");
     }
     UI.sec = sec;
     UI.secIdx = sec;
@@ -792,6 +830,7 @@ function openSeries(serie) {
     UI.episodes = { serie: serie, list: eps };
     DATA.view = eps;
     UI.itemIdx = 0; UI.itemTop = 0;
+    resetGrid();
     $("cont_head").innerHTML = esc(cut(serie.name, 40)) + "  (" + eps.length + " episodios)";
     renderGrid();
   });
