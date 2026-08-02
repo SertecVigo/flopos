@@ -11,18 +11,20 @@
     - ES5 puro: var y function. Sin arrow, template literals, const/let,
       async/await, fetch, optional chaining ni spread.
     - CSS: flexbox si; NO grid, NO var(), NO inset, NO aspect-ratio.
-      Posiciones con top/left/right/bottom y colores literales.
     - Red: XMLHttpRequest.
 
-  DECISIONES QUE VIENEN DE MEDIR EN LA TELE (fase 0, ver sonda):
+  DECISIONES QUE VIENEN DE MEDIR EN LA TELE (fase 0):
     - Se usa .ts, NO HLS: el m3u8 del proveedor no trae variantes de bitrate
       y en esta TV falla con MEDIA_ERR_DECODE.
-    - El primer arranque de video cuesta ~7,7 s porque inicializar el
-      pipeline de webOS es caro; los siguientes 1,5-3,7 s. Por eso el video
-      se lanza NADA MAS ABRIR, en paralelo a la descarga del catalogo.
-    - HEVC reproduce perfectamente (1,5 s): no hay que filtrar esos canales.
-    - Los 6.169 canales se bajan de una vez (2,1 MB, ~730 ms) y se filtran
-      en memoria. Parsear ese JSON cuesta ~240 ms aqui.
+    - El primer arranque de video cuesta ~7,7 s (inicializar el pipeline de
+      webOS); los siguientes 1,5-3,7 s. Por eso el video se lanza nada mas
+      abrir, en paralelo a la descarga del catalogo.
+    - HEVC reproduce bien (1,5 s): no se filtra ningun canal por codec.
+    - Catalogo: 6.169 canales (2,1 MB), 19.197 peliculas (21 MB) y 4.460
+      series (4,9 MB). Peliculas y series se cargan SOLO al entrar en su
+      seccion: 21 MB son ~5 s de red aunque el parseo sean 2,3 s.
+    - Las sinopsis ya vienen en el listado (campo plot): no hace falta una
+      peticion por titulo.
 -->
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -32,20 +34,16 @@
     font-family: "LG Smart UI", "Segoe UI", Arial, sans-serif;
   }
 
-  #video {
-    position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
-    background: #000;
-  }
+  #video { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; background: #000; }
 
   .screen { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; }
   .screen.on { display: block; }
 
-  /* ---------- arranque y configuracion ---------- */
+  /* ---------- configuracion y arranque ---------- */
   #setup, #splash { background: #05070f; padding: 70px 90px; }
   .brand { font-size: 62px; font-weight: 800; letter-spacing: -1px; }
   .brand span { color: #7c5cff; }
   .tag { font-size: 24px; color: #7a83b4; margin-top: 8px; }
-
   .field { margin-top: 26px; }
   .label { font-size: 21px; color: #7a83b4; margin-bottom: 8px; }
   .box {
@@ -56,79 +54,110 @@
   .btn {
     display: inline-block; height: 62px; line-height: 56px; padding: 0 38px;
     margin: 30px 18px 0 0; background: #141a38;
-    border: 3px solid #262e5c; border-radius: 10px;
-    font-size: 25px; font-weight: 700;
+    border: 3px solid #262e5c; border-radius: 10px; font-size: 25px; font-weight: 700;
   }
   .focus { border-color: #7c5cff; background: #232a5e; }
   .msg { margin-top: 24px; font-size: 21px; color: #ff8f8f; min-height: 28px; }
   .hint { margin-top: 20px; font-size: 20px; color: #5f679a; line-height: 1.6; }
-
-  #splash { text-align: left; }
   #splash .state { margin-top: 40px; font-size: 26px; color: #9aa2d0; }
   .bar { margin-top: 18px; width: 620px; height: 8px; background: #1a2145; border-radius: 4px; }
   .bar i { display: block; height: 8px; width: 0; background: #7c5cff; border-radius: 4px; }
 
-  /* ---------- navegador de canales ---------- */
-  /* Panel translucido sobre el video: el video sigue corriendo detras, que es
-     lo que hace que zapear se sienta inmediato. */
-  #browse { background: rgba(5,7,15,0.72); }
+  /* ---------- navegador ---------- */
+  #browse { background: rgba(5,7,15,0.55); }
 
+  #secs {
+    position: absolute; top: 0; left: 0; width: 250px; height: 1080px;
+    background: rgba(6,8,18,0.95); border-right: 2px solid #1d2450;
+  }
   #cats {
-    position: absolute; top: 0; left: 0; width: 430px; height: 1080px;
-    background: rgba(9,12,26,0.92); border-right: 2px solid #1d2450;
+    position: absolute; top: 0; left: 250px; width: 380px; height: 1080px;
+    background: rgba(9,12,26,0.90); border-right: 2px solid #1d2450;
   }
-  #chans {
-    position: absolute; top: 0; left: 430px; width: 700px; height: 1080px;
-    background: rgba(7,9,20,0.80); border-right: 2px solid #1d2450;
+  #cont {
+    position: absolute; top: 0; left: 630px; width: 1290px; height: 1080px;
+    background: rgba(7,9,20,0.72);
   }
+  /* En TV la tercera columna es estrecha y deja ver el video previsualizado. */
+  #browse.tv #cont { width: 700px; background: rgba(7,9,20,0.80); border-right: 2px solid #1d2450; }
+
   .head {
-    height: 92px; line-height: 92px; padding: 0 30px;
-    font-size: 22px; letter-spacing: 2px; color: #7c5cff; font-weight: 700;
+    height: 84px; line-height: 84px; padding: 0 26px;
+    font-size: 21px; letter-spacing: 2px; color: #7c5cff; font-weight: 700;
+    white-space: nowrap; overflow: hidden;
   }
-  .list { position: absolute; top: 92px; left: 0; right: 0; bottom: 0; overflow: hidden; }
+  .list { position: absolute; top: 84px; left: 0; right: 0; bottom: 0; overflow: hidden; }
 
   .row {
-    height: 66px; line-height: 66px; padding: 0 30px;
-    font-size: 25px; color: #b9c0e8; white-space: nowrap; overflow: hidden;
+    height: 64px; line-height: 64px; padding: 0 26px;
+    font-size: 24px; color: #b9c0e8; white-space: nowrap; overflow: hidden;
   }
   .row.sel { background: #1a2150; color: #ffffff; }
   .row.cur { background: #7c5cff; color: #ffffff; font-weight: 700; }
-  .row b { display: inline-block; width: 74px; color: #6f78ab; font-weight: 400; font-size: 21px; }
+  .row b { display: inline-block; width: 70px; color: #6f78ab; font-weight: 400; font-size: 20px; }
   .row.cur b { color: #e2ddff; }
-  .row em { font-style: normal; color: #ffd479; margin-right: 10px; }
+  .row em { font-style: normal; color: #ffd479; margin-right: 8px; }
 
-  /* Ficha del canal enfocado */
-  #info {
-    position: absolute; left: 1170px; top: 92px; width: 690px;
-    padding: 26px 30px; background: rgba(9,12,26,0.92);
+  #secs .row { height: 78px; line-height: 78px; font-size: 26px; }
+
+  /* ---------- rejilla de caratulas ---------- */
+  #grid { position: absolute; top: 84px; left: 26px; right: 26px; height: 700px; }
+  .cell {
+    position: absolute; width: 220px; height: 340px;
+    border: 4px solid transparent; border-radius: 12px; overflow: hidden;
+    background: #10142c;
+  }
+  .cell.cur { border-color: #7c5cff; background: #1d2450; }
+  .cell img { width: 100%; height: 268px; display: block; background: #0a0d1e; }
+  .cell .t {
+    padding: 8px 10px 0 10px; font-size: 18px; line-height: 1.2;
+    color: #c8cfef; height: 64px; overflow: hidden;
+  }
+  .cell.cur .t { color: #ffffff; }
+
+  /* ---------- ficha ---------- */
+  #detail {
+    position: absolute; left: 26px; right: 26px; top: 800px; height: 250px;
+    padding: 22px 26px; background: rgba(9,12,26,0.94);
     border: 2px solid #1d2450; border-radius: 14px;
   }
-  #info .n { font-size: 34px; font-weight: 700; line-height: 1.25; }
-  #info .c { margin-top: 12px; font-size: 22px; color: #7a83b4; }
-  #info img { margin-top: 22px; max-width: 260px; max-height: 150px; }
+  #detail .dt { font-size: 32px; font-weight: 700; }
+  #detail .dm { margin-top: 8px; font-size: 21px; color: #7c5cff; }
+  #detail .dp { margin-top: 12px; font-size: 20px; color: #9aa2d0; line-height: 1.45; height: 90px; overflow: hidden; }
+
+  /* Ficha lateral de canal (modo TV) */
+  #info {
+    position: absolute; left: 1360px; top: 84px; width: 520px;
+    padding: 24px 26px; background: rgba(9,12,26,0.92);
+    border: 2px solid #1d2450; border-radius: 14px;
+  }
+  #info .n { font-size: 30px; font-weight: 700; line-height: 1.25; }
+  #info .c { margin-top: 10px; font-size: 20px; color: #7a83b4; }
 
   #keys {
-    position: absolute; left: 1170px; bottom: 40px; width: 690px;
-    font-size: 20px; color: #5f679a; line-height: 1.8;
+    position: absolute; left: 1360px; bottom: 36px; width: 520px;
+    font-size: 19px; color: #5f679a; line-height: 1.75;
   }
   #keys u { text-decoration: none; color: #9aa2d0; }
+  #browse.vod #keys, #browse.series #keys { left: 26px; bottom: 12px; width: 1240px; }
+  #browse.vod #info, #browse.series #info { display: none; }
+  #browse.tv #grid, #browse.tv #detail { display: none; }
 
-  /* ---------- OSD a pantalla completa ---------- */
+  /* ---------- OSD ---------- */
   #osd {
-    position: absolute; left: 0; right: 0; bottom: 0; height: 210px;
-    padding: 34px 70px; display: none;
+    position: absolute; left: 0; right: 0; bottom: 0; height: 200px;
+    padding: 32px 70px; display: none;
     background: rgba(5,7,15,0.86); border-top: 3px solid #7c5cff;
   }
   #osd.on { display: block; }
-  #osd .n { font-size: 46px; font-weight: 800; }
-  #osd .c { margin-top: 10px; font-size: 24px; color: #9aa2d0; }
-  #osd .s { margin-top: 14px; font-size: 22px; color: #7c5cff; }
+  #osd .n { font-size: 44px; font-weight: 800; }
+  #osd .c { margin-top: 10px; font-size: 23px; color: #9aa2d0; }
+  #osd .s { margin-top: 12px; font-size: 21px; color: #7c5cff; }
 
-  /* Aviso de estado del reproductor (cargando, reintentos) */
   #status {
-    position: absolute; left: 70px; top: 60px; padding: 16px 28px;
+    position: absolute; left: 70px; top: 56px; padding: 14px 26px;
     background: rgba(5,7,15,0.82); border-left: 5px solid #7c5cff;
-    font-size: 26px; display: none;
+    font-size: 25px; display: none;
   }
   #status.on { display: block; }
 </style>
@@ -141,7 +170,6 @@
 <div id="setup" class="screen">
   <div class="brand">Flopo<span>TV</span></div>
   <div class="tag">Introduce los datos de tu servicio. Se guardan solo en esta tele.</div>
-
   <div class="field">
     <div class="label">Servidor: host y puerto, sin http://</div>
     <input id="f_host" class="box" type="text" placeholder="miservidor.com:8080">
@@ -154,7 +182,6 @@
     <div class="label">Contrasena</div>
     <input id="f_pass" class="box" type="text">
   </div>
-
   <div>
     <div id="b_go" class="btn">Entrar</div>
     <div id="b_clear" class="btn">Borrar</div>
@@ -172,29 +199,32 @@
 </div>
 
 <!-- ============ NAVEGADOR ============ -->
-<div id="browse" class="screen">
+<div id="browse" class="screen tv">
+  <div id="secs">
+    <div class="head">FLOPOTV</div>
+    <div class="list" id="secs_list"></div>
+  </div>
   <div id="cats">
-    <div class="head">CATEGORIAS</div>
+    <div class="head" id="cats_head">CATEGORIAS</div>
     <div class="list" id="cats_list"></div>
   </div>
-  <div id="chans">
-    <div class="head" id="chans_head">CANALES</div>
+  <div id="cont">
+    <div class="head" id="cont_head">CANALES</div>
     <div class="list" id="chans_list"></div>
+    <div id="grid"></div>
+    <div id="detail">
+      <div class="dt" id="d_title">&nbsp;</div>
+      <div class="dm" id="d_meta">&nbsp;</div>
+      <div class="dp" id="d_plot">&nbsp;</div>
+    </div>
   </div>
   <div id="info">
     <div class="n" id="info_name">&nbsp;</div>
     <div class="c" id="info_cat">&nbsp;</div>
-    <img id="info_logo" alt="">
   </div>
-  <div id="keys">
-    <u>OK</u> ver a pantalla completa &middot; <u>ATRAS</u> volver al video<br>
-    <u>AMARILLO</u> anadir o quitar de favoritos<br>
-    <u>AZUL</u> volver a cargar la lista &middot; <u>ROJO</u> salir de FlopoTV<br>
-    En pantalla completa: <u>arriba/abajo</u> menu y datos, <u>izq/der</u> cambiar de canal
-  </div>
+  <div id="keys"></div>
 </div>
 
-<!-- ============ CAPAS SOBRE EL VIDEO ============ -->
 <div id="osd">
   <div class="n" id="osd_name">&nbsp;</div>
   <div class="c" id="osd_cat">&nbsp;</div>
@@ -210,16 +240,7 @@
    ===================================================================== */
 
 function $(id) { return document.getElementById(id); }
-
-function now() {
-  if (window.performance && window.performance.now) return window.performance.now();
-  return new Date().getTime();
-}
-
-function esc(t) {
-  return String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
+function esc(t) { return String(t == null ? "" : t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 function trim(s) { return String(s == null ? "" : s).replace(/^\s+|\s+$/g, ""); }
 
 function store(k, v) {
@@ -230,10 +251,13 @@ function store(k, v) {
   } catch (e) { return null; }
 }
 
-/* El proveedor entrega URLs con https:// en puertos que no hablan TLS, asi que
-   guardamos el host pelado y ponemos el protocolo nosotros. */
 function bareHost(h) {
   return trim(h).replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+}
+
+function cut(s, n) {
+  s = String(s == null ? "" : s);
+  return s.length > n ? s.substring(0, n - 1) + "…" : s;
 }
 
 /* =====================================================================
@@ -242,35 +266,47 @@ function bareHost(h) {
 
 var CFG = { host: "", user: "", pass: "", proto: "http://" };
 
+var SEC = { TV: 0, VOD: 1, SERIES: 2 };
+var SEC_NAMES = ["TV EN DIRECTO", "PELICULAS", "SERIES"];
+
 var DATA = {
-  cats: [],        // [{id, name}]  incluye las virtuales FAVORITOS y TODOS
-  chans: [],       // catalogo completo, tal cual llega
-  view: [],        // canales de la categoria seleccionada
-  favs: {}         // { stream_id: 1 }
+  cats:   [[], [], []],   // categorias por seccion
+  items:  [[], [], []],   // catalogo completo por seccion
+  loaded: [false, false, false],
+  view:   [],             // items de la categoria seleccionada
+  favs:   {}
 };
 
 var UI = {
   screen: "splash",
-  col: 0,          // 0 = categorias, 1 = canales
+  sec: SEC.TV,
+  col: 1,            // 0 secciones, 1 categorias, 2 contenido
+  secIdx: 0,
   catIdx: 0,
-  chanIdx: 0,
-  catTop: 0,       // primera fila visible de cada lista (ventana virtual)
-  chanTop: 0,
+  itemIdx: 0,
+  catTop: 0,
+  itemTop: 0,
   playingId: null,
   playingName: "",
   osdTimer: null,
-  zapTimer: null,
-  logoTimer: null
+  previewTimer: null,
+  logoTimer: null,
+  imgTimer: null,
+  episodes: null,    // ficha de serie abierta
+  epIdx: 0
 };
 
 var KEY = {
   LEFT: 37, UP: 38, RIGHT: 39, DOWN: 40, OK: 13, BACK: 461,
   RED: 403, GREEN: 404, YELLOW: 405, BLUE: 406,
   CH_UP: 33, CH_DOWN: 34,
-  PLAY: 415, PAUSE: 19, STOP: 413
+  PLAY: 415, PAUSE: 19, PLAYPAUSE: 179, STOP: 413
 };
 
-var ROWS = 14;               // filas renderizadas por lista (virtualizacion)
+var ROWS = 15;        // filas por lista
+var GCOLS = 5;        // columnas de la rejilla
+var GROWS = 2;        // filas visibles de la rejilla
+var GCELLS = GCOLS * GROWS;
 var FAV_CAT = "__fav__";
 var ALL_CAT = "__all__";
 
@@ -280,9 +316,13 @@ var ALL_CAT = "__all__";
 
 function show(id) {
   var s = document.querySelectorAll(".screen");
-  for (var i = 0; i < s.length; i++) s[i].className = "screen";
-  if (id) $(id).className = "screen on";
+  for (var i = 0; i < s.length; i++) s[i].className = s[i].id === "browse" ? "screen " + secClass() : "screen";
+  if (id) $(id).className = "screen on" + (id === "browse" ? " " + secClass() : "");
   UI.screen = id || "player";
+}
+
+function secClass() {
+  return UI.sec === SEC.TV ? "tv" : (UI.sec === SEC.VOD ? "vod" : "series");
 }
 
 function setStatus(text) {
@@ -302,24 +342,20 @@ function splash(state, pct, hint) {
    4. API Xtream
    ===================================================================== */
 
-function apiUrl(action) {
+function apiUrl(qs) {
   return CFG.proto + CFG.host + "/player_api.php?username=" +
          encodeURIComponent(CFG.user) + "&password=" + encodeURIComponent(CFG.pass) +
-         (action ? "&action=" + action : "");
+         (qs ? "&" + qs : "");
 }
 
-function streamUrl(id) {
-  return CFG.proto + CFG.host + "/live/" + encodeURIComponent(CFG.user) + "/" +
-         encodeURIComponent(CFG.pass) + "/" + id + ".ts";
-}
+function liveUrl(id)  { return CFG.proto + CFG.host + "/live/"   + encodeURIComponent(CFG.user) + "/" + encodeURIComponent(CFG.pass) + "/" + id + ".ts"; }
+function movieUrl(id, ext) { return CFG.proto + CFG.host + "/movie/" + encodeURIComponent(CFG.user) + "/" + encodeURIComponent(CFG.pass) + "/" + id + "." + (ext || "mp4"); }
+function seriesUrl(id, ext) { return CFG.proto + CFG.host + "/series/" + encodeURIComponent(CFG.user) + "/" + encodeURIComponent(CFG.pass) + "/" + id + "." + (ext || "mp4"); }
 
-/* cb(error, datos). Un XHR descartado por el navegador entra por onload con
-   status 0 y cuerpo vacio, asi que se comprueba antes de parsear. */
-function apiGet(action, cb) {
+function apiGet(qs, cb) {
   var xhr = new XMLHttpRequest();
-  xhr.open("GET", apiUrl(action), true);
-  xhr.timeout = 45000;
-
+  xhr.open("GET", apiUrl(qs), true);
+  xhr.timeout = 60000;
   xhr.onload = function () {
     var txt = xhr.responseText || "";
     if (!txt.length) return cb("respuesta vacia (status " + xhr.status + ")");
@@ -330,25 +366,17 @@ function apiGet(action, cb) {
   };
   xhr.onerror   = function () { cb("no se pudo conectar con el servidor"); };
   xhr.ontimeout = function () { cb("el servidor tarda demasiado"); };
-
   try { xhr.send(); } catch (e) { cb("fallo al enviar la peticion"); }
 }
 
 /* =====================================================================
    5. Reproductor
-
-   Un unico <video> para toda la vida de la app: crear y destruir el elemento
-   reinicia el pipeline nativo y cuesta segundos.
    ===================================================================== */
 
 var PLAY = {
-  id: null,
-  tries: 0,
-  backoff: [2000, 5000, 15000, 30000],   // creciente a proposito: reintentar
-  timer: null,                            // rapido puede hacer que el proveedor
-  watchdog: null,                         // bloquee la cuenta (1 conexion)
-  lastTime: -1,
-  stalls: 0
+  id: null, url: null, tries: 0,
+  backoff: [2000, 5000, 15000, 30000],
+  timer: null, watchdog: null, lastTime: -1, stalls: 0
 };
 
 function stopWatchdog() {
@@ -356,25 +384,35 @@ function stopWatchdog() {
   if (PLAY.timer) { clearTimeout(PLAY.timer); PLAY.timer = null; }
 }
 
-/* Los ids se manejan SIEMPRE como cadena: la API los devuelve como numero
-   pero localStorage los recupera como texto, y comparar 184 !== "184" hacia
-   que al arrancar se reprodujera dos veces el mismo canal. */
-function playChannel(id, name) {
+/* Los ids se manejan como cadena: la API los da numericos y localStorage los
+   devuelve como texto, y comparar 184 !== "184" reproducia dos veces. */
+function playUrl(id, url, name) {
   id = String(id);
-  if (id === String(PLAY.id) && !PLAY.tries) {
-    // Ya esta sonando: no reiniciar el pipeline ni gastar la unica conexion.
-    UI.playingName = name || UI.playingName;
-    return;
-  }
-
+  if (id === String(PLAY.id) && !PLAY.tries) { UI.playingName = name || UI.playingName; return; }
   PLAY.id = id;
+  PLAY.url = url;
   PLAY.tries = 0;
   UI.playingId = id;
   UI.playingName = name || "";
-  store("floptv_last", id);
-
   startStream();
   paintOsd();
+}
+
+function playChannel(id, name) {
+  store("floptv_last", String(id));
+  playUrl(id, liveUrl(id), name);
+}
+
+/* El tipo debe corresponder al contenedor real o el pipeline lo rechaza.
+   El 98% de las peliculas de este proveedor son .mkv, no .ts. */
+function mimeFor(url) {
+  var m = /\.([a-z0-9]+)(\?|$)/i.exec(String(url));
+  var ext = m ? m[1].toLowerCase() : "";
+  if (ext === "ts")  return "video/mp2t";
+  if (ext === "mkv") return "video/x-matroska";
+  if (ext === "avi") return "video/x-msvideo";
+  if (ext === "mov") return "video/quicktime";
+  return "video/mp4";                       // mp4, m4v y cualquier otro
 }
 
 function startStream() {
@@ -383,8 +421,8 @@ function startStream() {
 
   while (v.firstChild) v.removeChild(v.firstChild);
   var src = document.createElement("source");
-  src.setAttribute("src", streamUrl(PLAY.id));
-  src.setAttribute("type", "video/mp2t");
+  src.setAttribute("src", PLAY.url);
+  src.setAttribute("type", mimeFor(PLAY.url));
   v.appendChild(src);
 
   PLAY.lastTime = -1;
@@ -393,26 +431,28 @@ function startStream() {
 
   try { v.load(); v.play(); } catch (e) { scheduleRetry("no se pudo iniciar"); return; }
 
-  // Vigilancia: si currentTime no avanza durante 12 s seguidos, el stream esta
-  // muerto aunque el elemento no dispare error.
   PLAY.watchdog = setInterval(function () {
+    // En pausa o al terminar una pelicula el tiempo no avanza, y eso no es
+    // un fallo: sin esto el watchdog reconectaria solo al pausar.
+    if (v.paused || v.ended) { PLAY.stalls = 0; return; }
+
     var t = v.currentTime;
     if (t > 0 && t !== PLAY.lastTime) {
-      PLAY.lastTime = t;
-      PLAY.stalls = 0;
+      PLAY.lastTime = t; PLAY.stalls = 0; PLAY.tries = 0;
       setStatus("");
-      PLAY.tries = 0;
       return;
     }
     PLAY.stalls++;
-    if (PLAY.stalls >= 6) scheduleRetry("sin imagen");   // 6 x 2 s
+    if (PLAY.stalls >= 6) scheduleRetry("sin imagen");
   }, 2000);
 }
 
+/* Espera creciente a proposito: reintentar rapido puede hacer que el
+   proveedor bloquee la cuenta, que ademas solo admite una conexion. */
 function scheduleRetry(motivo) {
   stopWatchdog();
   if (PLAY.tries >= PLAY.backoff.length) {
-    setStatus("No se pudo reproducir el canal. Pulsa ATRAS y prueba otro.");
+    setStatus("No se pudo reproducir. Pulsa ATRAS y prueba otro.");
     return;
   }
   var espera = PLAY.backoff[PLAY.tries];
@@ -431,94 +471,162 @@ function scheduleRetry(motivo) {
 })();
 
 /* =====================================================================
-   6. Listas virtualizadas
+   6. Listas y rejilla virtualizadas
 
-   Solo existen ROWS nodos por lista; al mover el foco se reescribe su
-   contenido en vez de crear o destruir DOM. Con 6.169 canales, meterlos
-   todos en el DOM es lo que mata a Chrome 38.
+   Solo existen ROWS nodos por lista y GCELLS celdas en la rejilla; al mover
+   el foco se reescribe su contenido. Con 19.197 peliculas, meterlas en el
+   DOM no es una opcion en Chrome 38.
    ===================================================================== */
 
-function buildRows(containerId) {
+function buildRows(containerId, n) {
   var c = $(containerId);
   c.innerHTML = "";
-  for (var i = 0; i < ROWS; i++) {
+  for (var i = 0; i < n; i++) {
     var d = document.createElement("div");
     d.className = "row";
     c.appendChild(d);
   }
 }
 
-/* Mantiene el indice enfocado dentro de la ventana visible. */
-function clampTop(top, idx, total) {
+function buildGrid() {
+  var g = $("grid");
+  g.innerHTML = "";
+  for (var i = 0; i < GCELLS; i++) {
+    var d = document.createElement("div");
+    d.className = "cell";
+    d.style.left = ((i % GCOLS) * 240) + "px";
+    d.style.top  = (Math.floor(i / GCOLS) * 356) + "px";
+    d.innerHTML = '<img alt=""><div class="t"></div>';
+    g.appendChild(d);
+  }
+}
+
+function clampTop(top, idx, total, win) {
   if (idx < top) top = idx;
-  if (idx >= top + ROWS) top = idx - ROWS + 1;
-  var max = Math.max(0, total - ROWS);
+  if (idx >= top + win) top = idx - win + 1;
+  var max = Math.max(0, total - win);
   if (top > max) top = max;
   if (top < 0) top = 0;
   return top;
 }
 
-function renderCats() {
-  UI.catTop = clampTop(UI.catTop, UI.catIdx, DATA.cats.length);
-  var nodes = $("cats_list").childNodes;
-  for (var i = 0; i < ROWS; i++) {
-    var idx = UI.catTop + i;
-    var n = nodes[i];
-    if (idx >= DATA.cats.length) { n.innerHTML = ""; n.className = "row"; continue; }
-    var c = DATA.cats[idx];
-    n.innerHTML = esc(c.name);
-    n.className = "row" + (idx === UI.catIdx ? (UI.col === 0 ? " cur" : " sel") : "");
+/* secIdx es el foco del menu; sec es la seccion realmente cargada. Se separan
+   para que mover el foco no vacie la pantalla: la seccion cambia al pulsar OK. */
+function renderSecs() {
+  var nodes = $("secs_list").childNodes;
+  for (var i = 0; i < nodes.length; i++) {
+    if (i >= SEC_NAMES.length) { nodes[i].innerHTML = ""; nodes[i].className = "row"; continue; }
+    var cls = "row";
+    if (UI.col === 0 && i === UI.secIdx) cls += " cur";
+    else if (i === UI.sec) cls += " sel";
+    nodes[i].innerHTML = esc(SEC_NAMES[i]);
+    nodes[i].className = cls;
   }
 }
 
+function renderCats() {
+  var cats = DATA.cats[UI.sec];
+  UI.catTop = clampTop(UI.catTop, UI.catIdx, cats.length, ROWS);
+  var nodes = $("cats_list").childNodes;
+  for (var i = 0; i < ROWS; i++) {
+    var idx = UI.catTop + i, n = nodes[i];
+    if (idx >= cats.length) { n.innerHTML = ""; n.className = "row"; continue; }
+    n.innerHTML = esc(cats[idx].name);
+    n.className = "row" + (idx === UI.catIdx ? (UI.col === 1 ? " cur" : " sel") : "");
+  }
+}
+
+/* --- lista de canales (seccion TV) --- */
 function renderChans() {
-  UI.chanTop = clampTop(UI.chanTop, UI.chanIdx, DATA.view.length);
+  UI.itemTop = clampTop(UI.itemTop, UI.itemIdx, DATA.view.length, ROWS);
   var nodes = $("chans_list").childNodes;
   for (var i = 0; i < ROWS; i++) {
-    var idx = UI.chanTop + i;
-    var n = nodes[i];
+    var idx = UI.itemTop + i, n = nodes[i];
     if (idx >= DATA.view.length) { n.innerHTML = ""; n.className = "row"; continue; }
     var ch = DATA.view[idx];
     var fav = DATA.favs[ch.stream_id] ? "<em>&#9733;</em>" : "";
     n.innerHTML = "<b>" + esc(ch.num || (idx + 1)) + "</b>" + fav + esc(ch.name);
-    n.className = "row" + (idx === UI.chanIdx ? (UI.col === 1 ? " cur" : " sel") : "");
+    n.className = "row" + (idx === UI.itemIdx ? (UI.col === 2 ? " cur" : " sel") : "");
   }
-  paintInfo();
+  var ch2 = DATA.view[UI.itemIdx];
+  $("info_name").innerHTML = ch2 ? esc(ch2.name) : "Sin canales";
+  $("info_cat").innerHTML  = ch2 ? esc(catNameOf(ch2.category_id)) : "";
 }
 
-/* La ficha y el logo se pintan aparte: el logo se pide con retardo para no
-   lanzar una descarga por cada pulsacion mientras se recorre la lista. */
-function paintInfo() {
-  var ch = DATA.view[UI.chanIdx];
-  if (!ch) {
-    $("info_name").innerHTML = "Sin canales";
-    $("info_cat").innerHTML = "";
-    $("info_logo").style.display = "none";
+/* --- rejilla de caratulas (peliculas y series) ---
+   Los titulos se pintan al momento y las imagenes se piden con retardo: sin
+   eso, recorrer la rejilla lanzaria una descarga por pulsacion. */
+function renderGrid() {
+  var total = DATA.view.length;
+  var row = Math.floor(UI.itemIdx / GCOLS);
+  var topRow = Math.floor(UI.itemTop / GCOLS);
+  topRow = clampTop(topRow, row, Math.ceil(total / GCOLS), GROWS);
+  UI.itemTop = topRow * GCOLS;
+
+  var cells = $("grid").childNodes;
+  for (var i = 0; i < GCELLS; i++) {
+    var idx = UI.itemTop + i, cell = cells[i];
+    var img = cell.childNodes[0], txt = cell.childNodes[1];
+    if (idx >= total) {
+      cell.style.display = "none";
+      img.removeAttribute("src");
+      continue;
+    }
+    cell.style.display = "block";
+    var it = DATA.view[idx];
+    txt.innerHTML = esc(cut(it.name, 46));
+    cell.className = "cell" + (idx === UI.itemIdx ? " cur" : "");
+    img.removeAttribute("src");        // libera la imagen anterior
+  }
+
+  if (UI.imgTimer) clearTimeout(UI.imgTimer);
+  UI.imgTimer = setTimeout(loadGridImages, 280);
+  paintDetail();
+}
+
+function loadGridImages() {
+  var cells = $("grid").childNodes;
+  for (var i = 0; i < GCELLS; i++) {
+    var idx = UI.itemTop + i;
+    if (idx >= DATA.view.length) continue;
+    var it = DATA.view[idx];
+    var url = it.stream_icon || it.cover || "";
+    if (!url) continue;
+    cells[i].childNodes[0].src = url;
+  }
+}
+
+function paintDetail() {
+  var it = DATA.view[UI.itemIdx];
+  if (!it) {
+    $("d_title").innerHTML = "Sin resultados";
+    $("d_meta").innerHTML = ""; $("d_plot").innerHTML = "";
     return;
   }
-  $("info_name").innerHTML = esc(ch.name);
-  $("info_cat").innerHTML = esc(catName(ch.category_id));
+  $("d_title").innerHTML = esc(it.name);
 
-  var img = $("info_logo");
-  img.style.display = "none";
-  if (UI.logoTimer) clearTimeout(UI.logoTimer);
-  if (!ch.stream_icon) return;
-  UI.logoTimer = setTimeout(function () {
-    img.onload  = function () { img.style.display = "block"; };
-    img.onerror = function () { img.style.display = "none"; };
-    img.src = ch.stream_icon;
-  }, 350);
+  var meta = [];
+  if (it.year) meta.push(it.year);
+  if (it.rating && parseFloat(it.rating) > 0) meta.push("★ " + it.rating);
+  if (it.genre) meta.push(cut(it.genre, 60));
+  if (it.episode_run_time) meta.push(it.episode_run_time + " min");
+  $("d_meta").innerHTML = esc(meta.join("   ·   "));
+  $("d_plot").innerHTML = esc(it.plot || "Sin sinopsis disponible.");
 }
 
-function catName(id) {
-  for (var i = 0; i < DATA.cats.length; i++) {
-    if (DATA.cats[i].id === String(id)) return DATA.cats[i].name;
-  }
+function catNameOf(id) {
+  var cats = DATA.cats[UI.sec];
+  for (var i = 0; i < cats.length; i++) if (cats[i].id === String(id)) return cats[i].name;
   return "";
 }
 
+function renderContent() {
+  if (UI.sec === SEC.TV) renderChans(); else renderGrid();
+  $("cont_head").innerHTML = esc(SEC_NAMES[UI.sec]) + "  (" + DATA.view.length + ")";
+}
+
 /* =====================================================================
-   7. Datos: categorias, canales, favoritos
+   7. Favoritos y categorias
    ===================================================================== */
 
 function loadFavs() {
@@ -526,97 +634,184 @@ function loadFavs() {
   catch (e) { DATA.favs = {}; }
 }
 
-function saveFavs() {
-  store("floptv_favs", JSON.stringify(DATA.favs));
-}
-
 function toggleFav() {
-  var ch = DATA.view[UI.chanIdx];
+  if (UI.sec !== SEC.TV) return;
+  var ch = DATA.view[UI.itemIdx];
   if (!ch) return;
   if (DATA.favs[ch.stream_id]) delete DATA.favs[ch.stream_id];
   else DATA.favs[ch.stream_id] = 1;
-  saveFavs();
-  // Si estamos dentro de FAVORITOS, la lista cambia bajo los pies.
-  if (DATA.cats[UI.catIdx] && DATA.cats[UI.catIdx].id === FAV_CAT) selectCategory(UI.catIdx);
+  store("floptv_favs", JSON.stringify(DATA.favs));
+  if (DATA.cats[UI.sec][UI.catIdx] && DATA.cats[UI.sec][UI.catIdx].id === FAV_CAT) selectCategory(UI.catIdx);
   else renderChans();
 }
 
+function idOf(it) { return it.stream_id !== undefined ? it.stream_id : it.series_id; }
+
 function selectCategory(idx) {
   UI.catIdx = idx;
-  var cat = DATA.cats[idx];
+  var cat = DATA.cats[UI.sec][idx];
   if (!cat) return;
+  var all = DATA.items[UI.sec];
 
-  if (cat.id === FAV_CAT) {
-    DATA.view = DATA.chans.filter(function (c) { return DATA.favs[c.stream_id]; });
-  } else if (cat.id === ALL_CAT) {
-    DATA.view = DATA.chans;
-  } else {
-    DATA.view = DATA.chans.filter(function (c) { return String(c.category_id) === cat.id; });
-  }
+  if (cat.id === FAV_CAT)      DATA.view = all.filter(function (c) { return DATA.favs[c.stream_id]; });
+  else if (cat.id === ALL_CAT) DATA.view = all;
+  else                          DATA.view = all.filter(function (c) { return String(c.category_id) === cat.id; });
 
-  UI.chanIdx = 0;
-  UI.chanTop = 0;
-  $("chans_head").innerHTML = esc(cat.name) + "  (" + DATA.view.length + ")";
+  UI.itemIdx = 0;
+  UI.itemTop = 0;
   renderCats();
-  renderChans();
+  renderContent();
 }
 
-function loadCatalog(cb) {
-  splash("Cargando categorias...", 20);
-  apiGet("get_live_categories", function (err, cats) {
+/* =====================================================================
+   8. Carga de catalogos
+   ===================================================================== */
+
+function buildCats(sec, raw, withFavs) {
+  var out = [];
+  if (withFavs) out.push({ id: FAV_CAT, name: "★  FAVORITOS" });
+  out.push({ id: ALL_CAT, name: sec === SEC.TV ? "TODOS LOS CANALES" : "TODO" });
+  for (var i = 0; i < raw.length; i++) {
+    out.push({ id: String(raw[i].category_id), name: raw[i].category_name });
+  }
+  DATA.cats[sec] = out;
+}
+
+var SEC_API = [
+  { cats: "action=get_live_categories",   items: "action=get_live_streams" },
+  { cats: "action=get_vod_categories",    items: "action=get_vod_streams" },
+  { cats: "action=get_series_categories", items: "action=get_series" }
+];
+
+/* Peliculas y series se cargan SOLO al entrar en su seccion: son 21 MB y
+   4,9 MB, unos 5 s y 0,8 s de red. No tiene sentido pagarlos al arrancar. */
+function ensureSection(sec, cb) {
+  if (DATA.loaded[sec]) return cb(null);
+  var api = SEC_API[sec];
+  show("splash");
+  splash("Cargando " + SEC_NAMES[sec].toLowerCase() + "...", 25,
+         sec === SEC.VOD ? "Son casi 20.000 titulos: tarda unos segundos la primera vez." : "");
+
+  apiGet(api.cats, function (err, cats) {
     if (err) return cb(err);
-
-    DATA.cats = [
-      { id: FAV_CAT, name: "★  FAVORITOS" },
-      { id: ALL_CAT, name: "TODOS LOS CANALES" }
-    ];
-    for (var i = 0; i < cats.length; i++) {
-      DATA.cats.push({ id: String(cats[i].category_id), name: cats[i].category_name });
-    }
-
-    splash("Cargando canales...", 45);
-    apiGet("get_live_streams", function (err2, chans) {
+    buildCats(sec, cats || [], sec === SEC.TV);
+    splash("Cargando " + SEC_NAMES[sec].toLowerCase() + "...", 60);
+    apiGet(api.items, function (err2, items) {
       if (err2) return cb(err2);
-      DATA.chans = chans || [];
+      DATA.items[sec] = items || [];
+      DATA.loaded[sec] = true;
       splash("Listo", 100);
       cb(null);
     });
   });
 }
 
+function switchSection(sec) {
+  ensureSection(sec, function (err) {
+    if (err) {
+      show("browse");
+      setStatus("No se pudo cargar: " + err);
+      return;
+    }
+    UI.sec = sec;
+    UI.secIdx = sec;
+    UI.catTop = 0; UI.itemIdx = 0; UI.itemTop = 0;
+    UI.col = 1;
+    UI.episodes = null;
+    paintKeys();
+    show("browse");
+    renderSecs();
+    // En TV se entra por TODOS LOS CANALES: FAVORITOS suele estar vacio.
+    selectCategory(sec === SEC.TV ? 1 : 0);
+  });
+}
+
 /* =====================================================================
-   8. Navegacion
+   9. Reproduccion desde la interfaz
    ===================================================================== */
 
-/* NO se cambia de canal al recorrer la lista, a proposito: la cuenta solo
-   admite UNA conexion simultanea, asi que previsualizar cada canal enfocado
-   cortaria el que estas viendo mientras exploras. Se zapea solo con OK. */
+/* Previsualizacion con retardo: al recorrer la lista no se sintoniza hasta
+   que el foco lleva quieto 800 ms. Cambiar de canal cuesta 1,5-3 s de
+   pipeline, asi que hacerlo en cada pulsacion seria contraproducente. */
+function previewDebounced() {
+  if (UI.sec !== SEC.TV) return;
+  if (UI.previewTimer) clearTimeout(UI.previewTimer);
+  UI.previewTimer = setTimeout(function () {
+    var ch = DATA.view[UI.itemIdx];
+    if (ch && String(ch.stream_id) !== String(UI.playingId)) playChannel(ch.stream_id, ch.name);
+  }, 800);
+}
 
-function moveList(delta) {
-  if (UI.col === 0) {
-    var n = DATA.cats.length;
-    UI.catIdx = (UI.catIdx + delta + n) % n;
-    selectCategory(UI.catIdx);
-  } else {
-    var m = DATA.view.length;
-    if (!m) return;
-    UI.chanIdx = (UI.chanIdx + delta + m) % m;
-    renderChans();
+function openItem() {
+  var it = DATA.view[UI.itemIdx];
+  if (!it) return;
+
+  if (UI.sec === SEC.TV) {
+    if (UI.previewTimer) clearTimeout(UI.previewTimer);
+    playChannel(it.stream_id, it.name);
+    show(null); flashOsd();
+    return;
   }
+
+  if (UI.sec === SEC.VOD) {
+    if (UI.previewTimer) clearTimeout(UI.previewTimer);
+    playUrl(it.stream_id, movieUrl(it.stream_id, it.container_extension), it.name);
+    show(null); flashOsd();
+    return;
+  }
+
+  openSeries(it);
 }
 
-function openBrowse() {
-  show("browse");
-  $("osd").className = "";
-  renderCats();
-  renderChans();
+/* La lista de episodios no viene en get_series: hace falta una peticion por
+   serie, y solo al abrirla. */
+function openSeries(serie) {
+  setStatus("Cargando episodios...");
+  apiGet("action=get_series_info&series_id=" + encodeURIComponent(serie.series_id), function (err, info) {
+    setStatus("");
+    if (err || !info || !info.episodes) { setStatus("No se pudieron cargar los episodios"); return; }
+
+    var eps = [], seasons = info.episodes, k, j;
+    for (k in seasons) {
+      if (!seasons.hasOwnProperty(k)) continue;
+      var arr = seasons[k];
+      for (j = 0; j < arr.length; j++) {
+        var e = arr[j];
+        eps.push({
+          id: e.id,
+          ext: e.container_extension,
+          name: "T" + k + "E" + (e.episode_num || (j + 1)) + "  " + (e.title || ""),
+          plot: (e.info && e.info.plot) || serie.plot,
+          stream_icon: (e.info && e.info.movie_image) || serie.cover,
+          year: serie.year
+        });
+      }
+    }
+    if (!eps.length) { setStatus("Esta serie no tiene episodios"); return; }
+
+    UI.episodes = { serie: serie, list: eps };
+    DATA.view = eps;
+    UI.itemIdx = 0; UI.itemTop = 0;
+    $("cont_head").innerHTML = esc(cut(serie.name, 40)) + "  (" + eps.length + " episodios)";
+    renderGrid();
+  });
 }
 
-function goFullscreen() {
-  var ch = DATA.view[UI.chanIdx];
-  if (!ch) return;                       // categoria vacia: no hay nada que ver
-  playChannel(ch.stream_id, ch.name);
-  show(null);
+function playEpisode() {
+  var e = DATA.view[UI.itemIdx];
+  if (!e) return;
+  playUrl("ep" + e.id, seriesUrl(e.id, e.ext), e.name);
+  show(null); flashOsd();
+}
+
+/* Pausar solo tiene sentido en peliculas y series. En un directo, reanudar
+   volveria a pedir el stream desde el momento actual, no desde donde se dejo. */
+function togglePause() {
+  var v = $("video");
+  try {
+    if (v.paused) { v.play(); setStatus(""); }
+    else { v.pause(); setStatus("En pausa"); }
+  } catch (e) {}
   flashOsd();
 }
 
@@ -629,29 +824,148 @@ function flashOsd() {
 
 function paintOsd() {
   $("osd_name").innerHTML = esc(UI.playingName || "");
-  var ch = null, i;
-  for (i = 0; i < DATA.chans.length; i++) {
-    if (String(DATA.chans[i].stream_id) === String(UI.playingId)) { ch = DATA.chans[i]; break; }
-  }
-  $("osd_cat").innerHTML = ch ? esc(catName(ch.category_id)) : "";
+  var txt = "", i;
+  if (UI.sec === SEC.TV) {
+    for (i = 0; i < DATA.items[SEC.TV].length; i++) {
+      if (String(DATA.items[SEC.TV][i].stream_id) === String(UI.playingId)) {
+        txt = catNameOf(DATA.items[SEC.TV][i].category_id); break;
+      }
+    }
+  } else if (UI.episodes) { txt = UI.episodes.serie.name; }
+  $("osd_cat").innerHTML = esc(txt);
   $("osd_state").innerHTML = DATA.favs[UI.playingId] ? "★ En favoritos" : "";
 }
 
-/* Canal siguiente/anterior dentro de la categoria actual, sin abrir el menu. */
+/* Canal siguiente/anterior sin abrir el menu (solo en TV). */
 function step(delta) {
+  if (UI.sec !== SEC.TV) return;
   var m = DATA.view.length;
   if (!m) return;
   var pos = -1, i;
   for (i = 0; i < m; i++) if (String(DATA.view[i].stream_id) === String(UI.playingId)) { pos = i; break; }
-  if (pos < 0) pos = 0; else pos = (pos + delta + m) % m;
-  UI.chanIdx = pos;
+  pos = pos < 0 ? 0 : (pos + delta + m) % m;
+  UI.itemIdx = pos;
   var ch = DATA.view[pos];
   playChannel(ch.stream_id, ch.name);
   flashOsd();
 }
 
 /* =====================================================================
-   9. Teclado
+   10. Navegacion
+   ===================================================================== */
+
+function moveFocus(delta) {
+  if (UI.col === 0) {
+    UI.secIdx = (UI.secIdx + delta + SEC_NAMES.length) % SEC_NAMES.length;
+    renderSecs();
+    return;
+  }
+  if (UI.col === 1) {
+    var cats = DATA.cats[UI.sec];
+    if (!cats.length) return;
+    UI.catIdx = (UI.catIdx + delta + cats.length) % cats.length;
+    selectCategory(UI.catIdx);
+    return;
+  }
+  var m = DATA.view.length;
+  if (!m) return;
+  UI.itemIdx = (UI.itemIdx + delta + m) % m;
+  renderContent();
+  previewDebounced();
+}
+
+/* En la rejilla, arriba y abajo saltan una FILA entera, no una caratula. */
+function moveVertical(dir) {
+  if (UI.col === 2 && UI.sec !== SEC.TV) {
+    var m = DATA.view.length;
+    if (!m) return;
+    var next = UI.itemIdx + dir * GCOLS;
+    if (next < 0 || next >= m) return;      // no dar la vuelta entre filas
+    UI.itemIdx = next;
+    renderContent();
+    return;
+  }
+  moveFocus(dir);
+}
+
+function paintKeys() {
+  var k = $("keys");
+  if (UI.sec === SEC.TV) {
+    k.innerHTML =
+      "<u>OK</u> pantalla completa &middot; <u>ATRAS</u> volver al video<br>" +
+      "<u>AMARILLO</u> favorito &middot; <u>AZUL</u> recargar &middot; <u>ROJO</u> salir<br>" +
+      "El canal enfocado se previsualiza solo tras un momento quieto.";
+  } else {
+    k.innerHTML =
+      "<u>OK</u> " + (UI.sec === SEC.SERIES ? "abrir serie / ver episodio" : "ver pelicula") +
+      " &middot; <u>ATRAS</u> volver &middot; <u>ROJO</u> salir";
+  }
+}
+
+document.addEventListener("keydown", function (e) {
+  var k = e.keyCode;
+
+  if (typing) {
+    if (k === KEY.BACK || k === KEY.OK) {
+      typing = false;
+      try { document.activeElement.blur(); } catch (err) {}
+      e.preventDefault();
+    }
+    return;
+  }
+
+  if (UI.screen === "setup") { setupKey(k); e.preventDefault(); return; }
+  if (UI.screen === "splash") return;
+
+  /* --- navegador --- */
+  if (UI.screen === "browse") {
+    if (k === KEY.UP)   { moveVertical(-1); e.preventDefault(); return; }
+    if (k === KEY.DOWN) { moveVertical(1);  e.preventDefault(); return; }
+
+    if (k === KEY.LEFT) {
+      if (UI.sec !== SEC.TV && UI.col === 2 && UI.itemIdx % GCOLS !== 0) { moveFocus(-1); }
+      else if (UI.col > 0) { UI.col--; renderSecs(); renderCats(); renderContent(); }
+      e.preventDefault(); return;
+    }
+    if (k === KEY.RIGHT) {
+      if (UI.sec !== SEC.TV && UI.col === 2 && (UI.itemIdx + 1) % GCOLS !== 0) { moveFocus(1); }
+      else if (UI.col < 2) { UI.col++; renderSecs(); renderCats(); renderContent(); if (UI.col === 2) previewDebounced(); }
+      e.preventDefault(); return;
+    }
+
+    if (k === KEY.OK) {
+      if (UI.col === 0) { switchSection(UI.secIdx); }
+      else if (UI.col === 1) { UI.col = 2; renderCats(); renderContent(); previewDebounced(); }
+      else if (UI.sec === SEC.SERIES && UI.episodes) { playEpisode(); }
+      else { openItem(); }
+      e.preventDefault(); return;
+    }
+
+    if (k === KEY.BACK) {
+      if (UI.episodes) {                       // salir de la ficha de serie
+        UI.episodes = null;
+        selectCategory(UI.catIdx);
+      } else { show(null); flashOsd(); }
+      e.preventDefault(); return;
+    }
+    if (k === KEY.YELLOW) { toggleFav(); e.preventDefault(); return; }
+    if (k === KEY.BLUE)   { DATA.loaded[UI.sec] = false; switchSection(UI.sec); e.preventDefault(); return; }
+    if (k === KEY.RED)    { exitApp(); e.preventDefault(); return; }
+    return;
+  }
+
+  /* --- video a pantalla completa --- */
+  if (k === KEY.PLAY || k === KEY.PAUSE || k === KEY.PLAYPAUSE) { togglePause(); e.preventDefault(); return; }
+  if (k === KEY.OK || k === KEY.DOWN)       { show("browse"); renderSecs(); renderCats(); renderContent(); e.preventDefault(); return; }
+  if (k === KEY.UP)                         { flashOsd(); e.preventDefault(); return; }
+  if (k === KEY.CH_UP   || k === KEY.RIGHT) { step(1);  e.preventDefault(); return; }
+  if (k === KEY.CH_DOWN || k === KEY.LEFT)  { step(-1); e.preventDefault(); return; }
+  if (k === KEY.YELLOW) { toggleFav(); paintOsd(); flashOsd(); e.preventDefault(); return; }
+  if (k === KEY.BACK)   { show("browse"); renderSecs(); renderCats(); renderContent(); e.preventDefault(); return; }
+}, false);
+
+/* =====================================================================
+   11. Configuracion
    ===================================================================== */
 
 var setupItems = ["f_host", "f_user", "f_pass", "b_go", "b_clear"];
@@ -666,72 +980,19 @@ function paintSetupFocus() {
   }
 }
 
-function setupActivate() {
-  var id = setupItems[setupIdx];
-  if (id === "b_go") return doLogin();
-  if (id === "b_clear") {
-    $("f_host").value = ""; $("f_user").value = ""; $("f_pass").value = "";
-    return;
+function setupKey(k) {
+  if (k === KEY.UP)   { setupIdx = (setupIdx + setupItems.length - 1) % setupItems.length; paintSetupFocus(); }
+  if (k === KEY.DOWN) { setupIdx = (setupIdx + 1) % setupItems.length; paintSetupFocus(); }
+  if (k === KEY.LEFT  && setupIdx === 4) { setupIdx = 3; paintSetupFocus(); }
+  if (k === KEY.RIGHT && setupIdx === 3) { setupIdx = 4; paintSetupFocus(); }
+  if (k === KEY.OK) {
+    var id = setupItems[setupIdx];
+    if (id === "b_go") return doLogin();
+    if (id === "b_clear") { $("f_host").value = ""; $("f_user").value = ""; $("f_pass").value = ""; return; }
+    typing = true;
+    $(id).focus();
   }
-  typing = true;
-  $(id).focus();
 }
-
-document.addEventListener("keydown", function (e) {
-  var k = e.keyCode;
-
-  /* --- teclado virtual abierto --- */
-  if (typing) {
-    if (k === KEY.BACK || k === KEY.OK) {
-      typing = false;
-      try { document.activeElement.blur(); } catch (err) {}
-      e.preventDefault();
-    }
-    return;
-  }
-
-  /* --- pantalla de configuracion --- */
-  if (UI.screen === "setup") {
-    if (k === KEY.UP)   { setupIdx = (setupIdx + setupItems.length - 1) % setupItems.length; paintSetupFocus(); }
-    if (k === KEY.DOWN) { setupIdx = (setupIdx + 1) % setupItems.length; paintSetupFocus(); }
-    if (k === KEY.LEFT  && setupIdx === 4) { setupIdx = 3; paintSetupFocus(); }
-    if (k === KEY.RIGHT && setupIdx === 3) { setupIdx = 4; paintSetupFocus(); }
-    if (k === KEY.OK)   { setupActivate(); }
-    e.preventDefault();
-    return;
-  }
-
-  if (UI.screen === "splash") return;
-
-  /* --- navegador de canales --- */
-  if (UI.screen === "browse") {
-    if (k === KEY.UP)    { moveList(-1); e.preventDefault(); return; }
-    if (k === KEY.DOWN)  { moveList(1);  e.preventDefault(); return; }
-    if (k === KEY.LEFT)  { UI.col = 0; renderCats(); renderChans(); e.preventDefault(); return; }
-    if (k === KEY.RIGHT) {
-      if (UI.col === 0 && DATA.view.length) { UI.col = 1; renderCats(); renderChans(); }
-      e.preventDefault(); return;
-    }
-    if (k === KEY.OK) {
-      if (UI.col === 0) { UI.col = 1; renderCats(); renderChans(); }
-      else goFullscreen();
-      e.preventDefault(); return;
-    }
-    if (k === KEY.BACK)   { show(null); flashOsd(); e.preventDefault(); return; }
-    if (k === KEY.YELLOW) { toggleFav(); e.preventDefault(); return; }
-    if (k === KEY.BLUE)   { reloadCatalog(); e.preventDefault(); return; }
-    if (k === KEY.RED)    { exitApp(); e.preventDefault(); return; }
-    return;
-  }
-
-  /* --- video a pantalla completa --- */
-  if (k === KEY.OK || k === KEY.DOWN)  { openBrowse(); e.preventDefault(); return; }
-  if (k === KEY.UP)                    { flashOsd(); e.preventDefault(); return; }
-  if (k === KEY.CH_UP   || k === KEY.RIGHT) { step(1);  e.preventDefault(); return; }
-  if (k === KEY.CH_DOWN || k === KEY.LEFT)  { step(-1); e.preventDefault(); return; }
-  if (k === KEY.YELLOW) { toggleFav(); paintOsd(); flashOsd(); e.preventDefault(); return; }
-  if (k === KEY.BACK)   { openBrowse(); e.preventDefault(); return; }
-}, false);
 
 (function bindBlur() {
   var ids = ["f_host", "f_user", "f_pass"];
@@ -740,12 +1001,8 @@ document.addEventListener("keydown", function (e) {
   }
 })();
 
-/* =====================================================================
-   10. Arranque
-   ===================================================================== */
-
-/* appinfo lleva disableBackHistoryAPI:true para poder usar ATRAS dentro de la
-   app, asi que ATRAS ya no la cierra: hace falta una salida explicita. */
+/* appinfo lleva disableBackHistoryAPI:true para usar ATRAS dentro de la app,
+   asi que ya no la cierra: hace falta salida explicita. */
 function exitApp() {
   stopWatchdog();
   try { $("video").pause(); } catch (e) {}
@@ -757,7 +1014,6 @@ function doLogin() {
   CFG.host = bareHost($("f_host").value);
   CFG.user = trim($("f_user").value);
   CFG.pass = trim($("f_pass").value);
-
   if (!CFG.host || !CFG.user || !CFG.pass) {
     $("setup_msg").innerHTML = "Rellena servidor, usuario y contrasena.";
     return;
@@ -769,63 +1025,55 @@ function doLogin() {
   boot();
 }
 
-function reloadCatalog() {
-  show("splash");
-  splash("Actualizando lista...", 10);
-  loadCatalog(function (err) {
-    if (err) { splash("Error", 100, err); setTimeout(openBrowse, 2500); return; }
-    selectCategory(UI.catIdx < DATA.cats.length ? UI.catIdx : 0);
-    openBrowse();
-  });
-}
+/* =====================================================================
+   12. Arranque
+   ===================================================================== */
 
-/* El video arranca ANTES que el catalogo y en paralelo: inicializar el
-   pipeline de webOS cuesta ~7,7 s la primera vez, asi que se solapa con la
-   descarga en lugar de sumarse a ella. */
 function boot() {
   show("splash");
   splash("Conectando...", 8, "");
   loadFavs();
 
+  // El video arranca ANTES que el catalogo y en paralelo: el pipeline de
+  // webOS tarda ~7,7 s la primera vez, y asi se solapa con la descarga.
   var last = store("floptv_last");
-  if (last) {
-    UI.playingId = last;
-    UI.playingName = "";
-    playChannel(last, "");
-  }
+  if (last) { UI.playingId = String(last); playChannel(last, ""); }
 
-  loadCatalog(function (err) {
+  ensureSection(SEC.TV, function (err) {
     if (err) {
-      splash("No se pudo cargar", 100, err + "  ·  Pulsa ATRAS para revisar los datos.");
-      UI.screen = "splash";
+      splash("No se pudo cargar", 100, err + "   Revisa los datos.");
       setTimeout(function () { show("setup"); paintSetupFocus(); }, 4000);
       return;
     }
+    UI.sec = SEC.TV;
+    UI.secIdx = SEC.TV;
+    UI.col = 2;
+    paintKeys();
+    show("browse");
+    renderSecs();
+    selectCategory(1);            // TODOS LOS CANALES
 
-    // Situar el foco en el canal que ya se esta reproduciendo, si lo hay.
-    var startCat = 1;   // TODOS LOS CANALES
-    selectCategory(startCat);
     if (UI.playingId) {
       for (var i = 0; i < DATA.view.length; i++) {
         if (String(DATA.view[i].stream_id) === String(UI.playingId)) {
-          UI.chanIdx = i;
+          UI.itemIdx = i;
           UI.playingName = DATA.view[i].name;
           break;
         }
       }
     }
-    UI.col = 1;
-    openBrowse();
+    renderContent();
   });
 }
 
 (function init() {
-  buildRows("cats_list");
-  buildRows("chans_list");
+  buildRows("secs_list", SEC_NAMES.length);
+  buildRows("cats_list", ROWS);
+  buildRows("chans_list", ROWS);
+  buildGrid();
 
-  // El host se precarga para no teclearlo con el mando: NO es una credencial.
-  // Usuario y contrasena nunca van en el codigo: este IPK se publica en un
-  // repo publico y cualquiera puede descomprimirlo.
+  // El host se precarga (no es una credencial). Usuario y contrasena nunca
+  // van en el codigo: este IPK se publica en un repo publico.
   CFG.host = store("floptv_host") || "aplicasmart.space:9955";
   CFG.user = store("floptv_user") || "";
   CFG.pass = store("floptv_pass") || "";
@@ -836,8 +1084,6 @@ function boot() {
     $("f_host").value = CFG.host;
     $("f_user").value = CFG.user;
     $("f_pass").value = CFG.pass;
-    // Si el host ya viene puesto, el foco arranca en Usuario: una pulsacion
-    // menos con el mando, que es donde duele.
     setupIdx = CFG.host ? 1 : 0;
     show("setup");
     paintSetupFocus();
