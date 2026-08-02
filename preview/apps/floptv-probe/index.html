@@ -88,8 +88,8 @@
   <div class="sub">Diagnostico de la tele antes de construir la app. Tarda unos 2 minutos.</div>
 
   <div class="field">
-    <div class="label">Servidor (host y puerto, tal cual te lo dio el proveedor)</div>
-    <input id="f_host" class="box" type="text" placeholder="http://miservidor.com:8080">
+    <div class="label">Servidor: host y puerto, SIN http:// (la sonda prueba los dos)</div>
+    <input id="f_host" class="box" type="text" placeholder="miservidor.com:8080">
   </div>
   <div class="field">
     <div class="label">Usuario</div>
@@ -166,11 +166,14 @@ function store(k, v) {
   } catch (e) { return null; }
 }
 
-/* Normaliza lo que escriba el usuario: anade http:// si falta y quita la barra final. */
-function normHost(h) {
-  h = String(h || "").replace(/^\s+|\s+$/g, "");
-  if (h && !/^https?:\/\//i.test(h)) h = "http://" + h;
-  return h.replace(/\/+$/, "");
+/* Quita protocolo y barras: nos quedamos con "host:puerto" pelado, porque la
+   sonda decide ella misma si va por http o https en vez de fiarse de lo escrito
+   (el proveedor da URLs con https:// en puertos que no hablan TLS). */
+function bareHost(h) {
+  return String(h || "")
+    .replace(/^\s+|\s+$/g, "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/.*$/, "");
 }
 
 /* =====================================================================
@@ -383,8 +386,18 @@ function measure(action, label, cb) {
     var t1 = now();
     out.status = xhr.status;
     var txt = xhr.responseText || "";
+    out.bytes = txt.length;
     out.kb = Math.round(txt.length / 1024);
     out.downloadMs = Math.round(t1 - t0);
+    out.snippet = txt.substring(0, 70);
+
+    // Chrome 38 entra por onload con status 0 y cuerpo vacio cuando el
+    // navegador descarta la respuesta (CORS, TLS fallido). Distinguirlo de
+    // un JSON de verdad malformado es lo que permite diagnosticar a distancia.
+    if (txt.length === 0) {
+      out.error = "respuesta VACIA (status " + xhr.status + ")";
+      return cb(out);
+    }
 
     var t2 = now();
     try {
@@ -394,7 +407,7 @@ function measure(action, label, cb) {
       out.sample = data;
     } catch (e) {
       out.parseMs = Math.round(now() - t2);
-      out.error = "JSON invalido";
+      out.error = "no es JSON (status " + xhr.status + ", " + out.bytes + " B)";
     }
     cb(out);
   };
@@ -412,6 +425,37 @@ function measure(action, label, cb) {
   };
 
   try { xhr.send(); } catch (e) { out.error = "send fallo: " + e.message; cb(out); }
+}
+
+/* ---------------------------------------------------------------------
+   Eleccion de protocolo: probamos http y https con el endpoint mas ligero
+   (4 KB) y nos quedamos con el que devuelva JSON. Asi da igual como este
+   escrita la URL, y de paso queda registrado cual de los dos funciona.
+   --------------------------------------------------------------------- */
+function testProtocol(done) {
+  markStep("proto", "doing");
+  var tries = ["http://" + CFG.bare, "https://" + CFG.bare];
+  var i = 0;
+  R.cat.proto = [];
+
+  function attempt() {
+    if (i >= tries.length) {
+      markStep("proto", "fail", "ni http ni https devuelven datos");
+      return done(false);
+    }
+    CFG.host = tries[i];
+    measure("get_live_categories", "sondeo", function (out) {
+      R.cat.proto.push({ url: tries[i], status: out.status, bytes: out.bytes,
+                         error: out.error, snippet: out.snippet });
+      if (!out.error) {
+        R.cat.protoOk = tries[i];
+        markStep("proto", "done", tries[i]);
+        return done(true);
+      }
+      i++; attempt();
+    });
+  }
+  attempt();
 }
 
 var CAT_TESTS = [
@@ -459,10 +503,15 @@ function testCatalog(done) {
 
 var PLAY_SECONDS = 25;
 
+/* Canal de respaldo (MOVISTAR DAZN 1, h264+aac, comprobado con ffprobe desde
+   el PC). La prueba de reproduccion NO debe depender de que el catalogo se
+   descargue: si falla el catalogo, lo que mas interesa medir es justamente
+   si el video tira. */
+var FALLBACK_STREAM_ID = 184;
+
 function playTest(kind, cb) {
-  var id = R.cat.firstStreamId;
+  var id = R.cat.firstStreamId || FALLBACK_STREAM_ID;
   var out = { kind: kind };
-  if (!id) { out.error = "sin canal de prueba"; return cb(out); }
 
   var v = $("v");
   var url = CFG.host + "/live/" + encodeURIComponent(CFG.user) + "/" +
@@ -555,36 +604,46 @@ function testPlayback(done) {
    ===================================================================== */
 
 function startRun() {
-  CFG.host = normHost($("f_host").value);
+  CFG.bare = bareHost($("f_host").value);
+  CFG.host = "http://" + CFG.bare;   // provisional: testProtocol decide cual vale
   CFG.user = $("f_user").value.replace(/^\s+|\s+$/g, "");
   CFG.pass = $("f_pass").value.replace(/^\s+|\s+$/g, "");
 
   var err = $("setup_err");
-  if (!CFG.host || !CFG.user || !CFG.pass) {
+  if (!CFG.bare || !CFG.user || !CFG.pass) {
     err.innerHTML = "Faltan datos: rellena servidor, usuario y contrasena.";
     err.style.display = "block";
     return;
   }
   err.style.display = "none";
-  store("floptv_host", CFG.host);
+  store("floptv_host", CFG.bare);
   store("floptv_user", CFG.user);
   store("floptv_pass", CFG.pass);
 
   R = { sys: {}, codecs: {}, cat: {}, play: {}, startedAt: new Date().toString() };
   $("steps").innerHTML = "";
   stepEls = {};
-  addStep("sys",  "Sistema: modelo, firmware, resolucion");
-  addStep("cod",  "Codecs soportados por el decodificador");
-  addStep("cat",  "Catalogo: descarga y parseo");
-  addStep("play", "Reproduccion: HLS frente a TS");
+  addStep("sys",   "Sistema: modelo, firmware, resolucion");
+  addStep("cod",   "Codecs soportados por el decodificador");
+  addStep("proto", "Protocolo: probando http y https");
+  addStep("cat",   "Catalogo: descarga y parseo");
+  addStep("play",  "Reproduccion: HLS frente a TS");
   show("running");
 
+  // La reproduccion se ejecuta SIEMPRE, funcione o no el catalogo: usa un
+  // canal de respaldo. Es el dato mas caro de conseguir y no debe perderse.
   testSystem(function () {
     testCodecs(function () {
-      testCatalog(function () {
-        testPlayback(function () {
-          render();
-          show("report");
+      testProtocol(function (ok) {
+        if (!ok) {
+          markStep("cat", "fail", "sin conexion con el servidor");
+          return testPlayback(function () { render(); show("report"); });
+        }
+        testCatalog(function () {
+          testPlayback(function () {
+            render();
+            show("report");
+          });
         });
       });
     });
@@ -625,12 +684,26 @@ function render() {
   $("colA").innerHTML = h;
 
   /* --- columna derecha --- */
-  h = '<div class="card"><h2>CATALOGO</h2>';
+  h = '<div class="card"><h2>CONEXION</h2>';
+  var pr = R.cat.proto || [];
+  if (!pr.length) {
+    h += line("Protocolo", "no probado", "bad");
+  } else {
+    for (var q = 0; q < pr.length; q++) {
+      var pp = pr[q];
+      h += line(pp.url, pp.error ? pp.error : "OK (" + pp.bytes + " B)", pp.error ? "bad" : "ok");
+      if (pp.error && pp.snippet) h += line("  respuesta", pp.snippet, "warn");
+    }
+  }
+  h += "</div>";
+
+  h += '<div class="card"><h2>CATALOGO</h2>';
   var t = R.cat.tests || [];
   for (var i = 0; i < t.length; i++) {
     var x = t[i];
     if (x.error) {
       h += line(x.label, x.error, "bad");
+      if (x.snippet) h += line("  respuesta", x.snippet, "warn");
     } else {
       h += line(x.label, x.items + " items &middot; " + x.kb + " KB &middot; red " +
                 x.downloadMs + " ms &middot; parseo " + x.parseMs + " ms",
@@ -640,7 +713,9 @@ function render() {
   h += "</div>";
 
   h += '<div class="card"><h2>REPRODUCCION</h2>';
-  h += line("Canal de prueba", R.cat.firstStreamName || "ninguno");
+  h += line("Canal de prueba",
+            R.cat.firstStreamName || ("respaldo id " + FALLBACK_STREAM_ID),
+            R.cat.firstStreamName ? "" : "warn");
   var kinds = [["HLS (.m3u8)", R.play.hls], ["TS (.ts)", R.play.ts]];
   for (var j = 0; j < kinds.length; j++) {
     var p = kinds[j][1];

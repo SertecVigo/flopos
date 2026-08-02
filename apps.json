@@ -13,18 +13,18 @@
       "manifestUrl": "https://sertecvigo.github.io/flopos/floptv-probe.manifest.json",
       "manifest": {
         "id": "com.flop.floptv.probe",
-        "version": "1.0.0",
+        "version": "1.0.1",
         "type": "web",
         "title": "FlopTV Probe",
         "appDescription": "Sonda de diagnostico: mide codecs, catalogo y reproduccion IPTV en la tele antes de construir FlopTV",
         "iconUri": "https://sertecvigo.github.io/flopos/floptv-icon.png",
         "sourceUrl": "https://github.com/SertecVigo/flopos",
         "rootRequired": false,
-        "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.floptv.probe_1.0.0_all.ipk",
+        "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.floptv.probe_1.0.1_all.ipk",
         "ipkHash": {
-          "sha256": "20cc0cd292c2f8d2b57458d0a5260933a92a678b0ebea46357dce61704bb97ae"
+          "sha256": "9e2f1b4a6dad04c57c5318019cad58dce18387092ae9faba86f3e9ce6eacaaef"
         },
-        "ipkSize": 16256
+        "ipkSize": 17304
       },
       "pool": "main",
       "shortDescription": "Diagnostico IPTV de la tele"
