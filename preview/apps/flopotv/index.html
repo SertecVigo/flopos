@@ -125,6 +125,16 @@
           border: 2px solid #1d2450; border-radius: 14px; }
   #info .n { font-size: 30px; font-weight: 700; line-height: 1.25; }
   #info .c { margin-top: 10px; font-size: 20px; color: #7a83b4; }
+  /* Guia: programa actual y siguiente del canal enfocado */
+  #epg { margin-top: 20px; border-top: 2px solid #1d2450; padding-top: 18px; }
+  #epg .eh { font-size: 17px; letter-spacing: 2px; color: #7c5cff; }
+  #epg .en { margin-top: 6px; font-size: 23px; font-weight: 700; line-height: 1.3; }
+  #epg .et { margin-top: 4px; font-size: 19px; color: #9aa2d0; }
+  #epg .eb { margin-top: 8px; width: 100%; height: 6px; background: #232a5e; border-radius: 3px; }
+  #epg .eb i { display: block; height: 6px; background: #7c5cff; border-radius: 3px; }
+  #epg .ed { margin-top: 10px; font-size: 17px; color: #6f78ab; line-height: 1.4;
+             height: 68px; overflow: hidden; }
+  #epg .nx { margin-top: 16px; font-size: 18px; color: #7a83b4; line-height: 1.35; }
 
   #keys { position: absolute; left: 1360px; bottom: 36px; width: 520px;
           font-size: 19px; color: #5f679a; line-height: 1.75; }
@@ -240,7 +250,18 @@
       <div class="dp" id="d_plot">&nbsp;</div>
     </div>
   </div>
-  <div id="info"><div class="n" id="info_name">&nbsp;</div><div class="c" id="info_cat">&nbsp;</div></div>
+  <div id="info">
+    <div class="n" id="info_name">&nbsp;</div>
+    <div class="c" id="info_cat">&nbsp;</div>
+    <div id="epg">
+      <div class="eh">AHORA</div>
+      <div class="en" id="epg_now">&nbsp;</div>
+      <div class="et" id="epg_time">&nbsp;</div>
+      <div class="eb"><i id="epg_bar"></i></div>
+      <div class="ed" id="epg_desc">&nbsp;</div>
+      <div class="nx" id="epg_next">&nbsp;</div>
+    </div>
+  </div>
   <div id="keys"></div>
 </div>
 
@@ -364,7 +385,7 @@ var GROWS = 2;                       // filas visibles
 var POOL_ROWS = GROWS + 2;           // + una de margen arriba y otra abajo
 var POOL = POOL_ROWS * GCOLS;        // 20 celdas
 var CELL_W = 240, CELL_H = 356;
-var FAV_CAT = "__fav__", ALL_CAT = "__all__", SEARCH_CAT = "__search__";
+var FAV_CAT = "__fav__", ALL_CAT = "__all__", SEARCH_CAT = "__search__", CONT_CAT = "__cont__";
 
 /* =====================================================================
    3. Pantallas
@@ -432,7 +453,8 @@ var PLAY = {
   key: null,          // clave de progreso (null en directo)
   resumeTo: 0,        // segundos a los que saltar cuando haya metadatos
   saveTimer: null,
-  ep: null            // { list, idx } de la temporada, para encadenar episodios
+  ep: null,           // { list, idx } de la temporada, para encadenar episodios
+  meta: null          // { n, u, img, sec, id } para la lista de continuar viendo
 };
 
 function stopWatchdog() {
@@ -944,6 +966,7 @@ function saveProg() {
 }
 
 function progKey(sec, it) {
+  if (it._key) return it._key;                 // item de "continuar viendo"
   if (UI.serie && it.id !== undefined) return "ep:" + it.id;
   return SEC_PREFIX[sec] + ":" + idOf(it);
 }
@@ -970,15 +993,170 @@ function recordProgress() {
   if (!t || !isFinite(t) || t < 5) return;
   PROG[PLAY.key] = { t: Math.floor(t), d: (isFinite(d) && d > 0) ? Math.floor(d) : 0, ts: nowSec() };
   saveProg();
+  if (t > 30) touchCont();
 }
 
 function nowSec() { return Math.floor(new Date().getTime() / 1000); }
+
+/* ---------------------------------------------------------------------
+   Continuar viendo: lista aparte con lo justo para volver a poner un
+   titulo sin tener que localizarlo en el catalogo. Los episodios no viven
+   en DATA.items (ahi solo estan las series), asi que sin esto no habria
+   forma de reanudarlos desde la pantalla principal.
+   --------------------------------------------------------------------- */
+
+var CONT = [];
+var CONT_MAX = 30;
+
+function loadCont() {
+  try { CONT = JSON.parse(store("floptv_cont") || "[]") || []; } catch (e) { CONT = []; }
+}
+
+function saveCont() {
+  if (CONT.length > CONT_MAX) CONT = CONT.slice(0, CONT_MAX);
+  store("floptv_cont", JSON.stringify(CONT));
+}
+
+/* Se llama al guardar progreso: el titulo sube al principio de la lista. */
+function touchCont() {
+  if (!PLAY.key || !PLAY.meta) return;
+  var i;
+  for (i = 0; i < CONT.length; i++) {
+    if (CONT[i].k === PLAY.key) { CONT.splice(i, 1); break; }
+  }
+  var p = PROG[PLAY.key];
+  // Terminado: fuera de la lista, ya no hay nada que continuar.
+  if (p && p.d && p.t >= p.d * VISTO) { saveCont(); return; }
+
+  CONT.unshift({
+    k: PLAY.key, n: PLAY.meta.n, u: PLAY.meta.u,
+    img: PLAY.meta.img, sec: PLAY.meta.sec, id: PLAY.meta.id, ts: nowSec()
+  });
+  saveCont();
+}
+
+/* Items sinteticos para la rejilla. Llevan _url para poder reproducirlos
+   directamente, sin pasar por la ficha de la serie. */
+function contList(sec) {
+  var out = [], i;
+  for (i = 0; i < CONT.length; i++) {
+    var c = CONT[i];
+    if (c.sec !== sec) continue;
+    var p = PROG[c.k];
+    if (!p || (p.d && p.t >= p.d * VISTO)) continue;
+    out.push({
+      name: c.n, stream_icon: c.img, cover: c.img,
+      plot: "Continuar desde " + fmt(p.t) + (p.d ? " de " + fmt(p.d) : ""),
+      _url: c.u, _key: c.k, _id: c.id
+    });
+  }
+  return out;
+}
 
 function fmt(s) {
   s = Math.max(0, Math.floor(s || 0));
   var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
   function dd(n) { return n < 10 ? "0" + n : "" + n; }
   return h > 0 ? (h + ":" + dd(m) + ":" + dd(x)) : (m + ":" + dd(x));
+}
+
+/* =====================================================================
+   5d. Guia de programacion (EPG)
+
+   get_short_epg devuelve titulo y descripcion en base64. Se pide solo del
+   canal enfocado y con retardo: son 6.169 canales y no tiene sentido bajar
+   una guia completa que ademas esta en el servidor.
+   ===================================================================== */
+
+var EPG = {};                 // cache por canal
+var EPG_TTL = 600;            // segundos: la parrilla no cambia tan rapido
+var epgTimer = null;
+var epgFor = null;            // canal cuya guia se esta mostrando
+
+/* Xtream manda el texto en base64 y con acentos: atob devuelve bytes sueltos,
+   asi que hay que reinterpretarlos como UTF-8 o salen mojibake. */
+function b64(s) {
+  if (!s) return "";
+  try { return decodeURIComponent(escape(window.atob(s))); }
+  catch (e) {
+    try { return window.atob(s); } catch (e2) { return String(s); }
+  }
+}
+
+function hhmm(ts) {
+  var d = new Date(ts * 1000);
+  var h = d.getHours(), m = d.getMinutes();
+  return (h < 10 ? "0" + h : h) + ":" + (m < 10 ? "0" + m : m);
+}
+
+function clearEpg() {
+  $("epg_now").innerHTML = "&nbsp;";
+  $("epg_time").innerHTML = "&nbsp;";
+  $("epg_desc").innerHTML = "&nbsp;";
+  $("epg_next").innerHTML = "&nbsp;";
+  $("epg_bar").style.width = "0";
+}
+
+function requestEpg(id) {
+  if (epgTimer) clearTimeout(epgTimer);
+  if (!id) { clearEpg(); return; }
+
+  var c = EPG[id];
+  if (c && (nowSec() - c.ts) < EPG_TTL) { paintEpg(id); return; }
+
+  clearEpg();
+  $("epg_now").innerHTML = "Cargando guia...";
+  epgTimer = setTimeout(function () {
+    apiGet("action=get_short_epg&stream_id=" + encodeURIComponent(id) + "&limit=4", function (err, data) {
+      if (err || !data) { EPG[id] = { ts: nowSec(), list: [] }; paintEpg(id); return; }
+      var raw = data.epg_listings || data || [];
+      var list = [];
+      for (var i = 0; i < raw.length; i++) {
+        var e = raw[i];
+        list.push({
+          title: b64(e.title),
+          desc: b64(e.description),
+          start: parseInt(e.start_timestamp, 10) || 0,
+          stop: parseInt(e.stop_timestamp, 10) || 0
+        });
+      }
+      EPG[id] = { ts: nowSec(), list: list };
+      paintEpg(id);
+    });
+  }, 900);   // algo mas que la previsualizacion: primero la imagen, luego el texto
+}
+
+function paintEpg(id) {
+  // Puede llegar tarde: si ya se movio el foco, no pisar la guia del nuevo canal.
+  var actual = DATA.view[UI.itemIdx];
+  if (!actual || String(actual.stream_id) !== String(id)) return;
+
+  var c = EPG[id];
+  if (!c || !c.list.length) {
+    clearEpg();
+    $("epg_now").innerHTML = "Sin guia para este canal";
+    return;
+  }
+  var t = nowSec(), ahora = null, sig = null, i;
+  for (i = 0; i < c.list.length; i++) {
+    var p = c.list[i];
+    if (p.start <= t && t < p.stop) { ahora = p; sig = c.list[i + 1] || null; break; }
+  }
+  if (!ahora) { ahora = c.list[0]; sig = c.list[1] || null; }
+
+  $("epg_now").innerHTML = esc(cut(ahora.title, 70) || "Sin titulo");
+  $("epg_time").innerHTML = ahora.start ? esc(hhmm(ahora.start) + " - " + hhmm(ahora.stop)) : "";
+  $("epg_desc").innerHTML = esc(cut(ahora.desc, 220));
+
+  var pct = 0;
+  if (ahora.stop > ahora.start && t >= ahora.start) {
+    pct = (t - ahora.start) / (ahora.stop - ahora.start);
+    if (pct > 1) pct = 1;
+  }
+  $("epg_bar").style.width = Math.round(pct * 100) + "%";
+  $("epg_next").innerHTML = sig
+    ? "A continuacion &middot; " + esc(hhmm(sig.start)) + "  " + esc(cut(sig.title, 46))
+    : "";
 }
 
 /* =====================================================================
@@ -1000,7 +1178,10 @@ function loadFavs() {
   DATA.favs = out;
 }
 
-function isFav(it) { return !!DATA.favs[favKey(UI.sec, it)]; }
+function isFav(it) {
+  if (!it || it._url) return false;            // los de "continuar viendo" no se marcan
+  return !!DATA.favs[favKey(UI.sec, it)];
+}
 
 function toggleFav() {
   if (UI.serie) return;                       // dentro de una serie no aplica
@@ -1084,6 +1265,10 @@ function renderChans() {
   var ch2 = DATA.view[UI.itemIdx];
   $("info_name").innerHTML = ch2 ? esc(ch2.name) : "Sin canales";
   $("info_cat").innerHTML  = ch2 ? esc(catNameOf(ch2.category_id)) : "";
+
+  // La guia del canal enfocado, con su propio retardo y cache.
+  var idAhora = ch2 ? String(ch2.stream_id) : null;
+  if (idAhora !== epgFor) { epgFor = idAhora; requestEpg(idAhora); }
 }
 
 /* =====================================================================
@@ -1258,10 +1443,10 @@ function renderContent() {
    ===================================================================== */
 
 function buildCats(sec, raw) {
-  var out = [
-    { id: FAV_CAT, name: "★  FAVORITOS" },
-    { id: ALL_CAT, name: sec === SEC.TV ? "TODOS LOS CANALES" : "TODO" }
-  ];
+  var out = [];
+  if (sec !== SEC.TV) out.push({ id: CONT_CAT, name: "CONTINUAR VIENDO" });
+  out.push({ id: FAV_CAT, name: "★  FAVORITOS" });
+  out.push({ id: ALL_CAT, name: sec === SEC.TV ? "TODOS LOS CANALES" : "TODO" });
   for (var i = 0; i < raw.length; i++) {
     out.push({ id: String(raw[i].category_id), name: raw[i].category_name });
   }
@@ -1286,7 +1471,9 @@ function selectCategory(idx) {
   if (!cat) return;
   var all = DATA.items[UI.sec];
 
-  if (cat.id === FAV_CAT) {
+  if (cat.id === CONT_CAT) {
+    DATA.view = contList(UI.sec);
+  } else if (cat.id === FAV_CAT) {
     DATA.view = all.filter(function (c) { return DATA.favs[favKey(UI.sec, c)]; });
   } else if (cat.id === SEARCH_CAT) {
     DATA.view = searchIn(all, UI.search);
@@ -1357,7 +1544,9 @@ function switchSection(sec) {
     paintKeys();
     show("browse");
     renderSecs();
-    selectCategory(sec === SEC.TV ? 1 : 0);   // en TV, TODOS; en VOD/series, FAVORITOS
+    // En TV, TODOS LOS CANALES. En VOD y series, "continuar viendo" si hay algo
+    // empezado; si no, TODO: entrar en una categoria vacia despista.
+    selectCategory(sec === SEC.TV ? 1 : (contList(sec).length ? 0 : 2));
   });
 }
 
@@ -1435,6 +1624,9 @@ function openItem() {
 
   if (UI.sec === SEC.TV) { playChannel(it.stream_id, it.name); show(null); flashOsd(); return; }
 
+  // Item de "continuar viendo": ya trae su URL, no hay que buscarlo.
+  if (it._url) { askResume(it, it._key, it._id, it._url, it.name, null); return; }
+
   if (UI.sec === SEC.VOD) {
     askResume(it, "vod:" + it.stream_id, it.stream_id,
               movieUrl(it.stream_id, it.container_extension), it.name);
@@ -1449,9 +1641,10 @@ function openItem() {
   openSeries(it);
 }
 
-function startItem(key, id, url, name, from, ep) {
+function startItem(key, id, url, name, from, ep, meta) {
   playUrl(id, url, name, key, from);
   PLAY.ep = ep || null;
+  PLAY.meta = meta || null;
   show(null);
   flashOsd();
 }
@@ -1461,11 +1654,15 @@ function startItem(key, id, url, name, from, ep) {
 var RESUME = null;
 
 function askResume(it, key, id, url, name, ep) {
+  var meta = {
+    n: name, u: url, id: id, sec: UI.sec,
+    img: it.stream_icon || it.cover || (UI.serie ? UI.serie.info.cover : "")
+  };
   var p = PROG[key];
   var terminada = p && p.d && p.t >= p.d * VISTO;
-  if (!p || p.t < 30 || terminada) { startItem(key, id, url, name, 0, ep); return; }
+  if (!p || p.t < 30 || terminada) { startItem(key, id, url, name, 0, ep, meta); return; }
 
-  RESUME = { key: key, id: id, url: url, name: name, t: p.t, row: 0, ep: ep };
+  RESUME = { key: key, id: id, url: url, name: name, t: p.t, row: 0, ep: ep, meta: meta };
   $("rs_title").innerHTML = esc(cut(name, 60));
   $("rs_sub").innerHTML = "Lo dejaste en " + fmt(p.t) + (p.d ? " de " + fmt(p.d) : "");
   $("resume").className = "on";
@@ -1487,7 +1684,7 @@ function closeResume(empezarEn) {
   var r = RESUME;
   RESUME = null;
   if (empezarEn === null) { show("browse"); renderSecs(); renderCats(); renderContent(); return; }
-  startItem(r.key, r.id, r.url, r.name, empezarEn, r.ep);
+  startItem(r.key, r.id, r.url, r.name, empezarEn, r.ep, r.meta);
 }
 
 function flashOsd() {
@@ -1820,6 +2017,7 @@ function boot() {
   splash("Conectando...", 8, "");
   loadFavs();
   loadProg();
+  loadCont();
 
   // El video arranca ANTES que el catalogo y en paralelo: el pipeline de
   // webOS tarda ~7,7 s la primera vez y asi se solapa con la descarga.
