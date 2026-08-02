@@ -1,15 +1,15 @@
 {
   "id": "com.flop.flopotv",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "web",
   "title": "FlopoTV",
   "appDescription": "Cliente IPTV para webOS: directos, peliculas y series con buscador, favoritos, pistas de audio por idioma, subtitulos, continuar donde lo dejaste y siguiente episodio",
   "iconUri": "https://sertecvigo.github.io/flopos/flopotv-icon.png",
   "sourceUrl": "https://github.com/SertecVigo/flopos",
   "rootRequired": false,
-  "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.flopotv_0.6.0_all.ipk",
+  "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.flopotv_0.6.1_all.ipk",
   "ipkHash": {
-    "sha256": "de440eb22dc8cd68629bbf2828ea3c539d295596f3cb0bb3bea0ef9e1f10905b"
+    "sha256": "8ea1ee51793ffda6dfdf0fe547771eebae3d3cc99d16562f3d343db35496c50e"
   },
-  "ipkSize": 28226
+  "ipkSize": 28680
 }

@@ -664,6 +664,31 @@ function prettyLang(code) {
    la suscripcion se pierde. */
 var mediaBridge = null;
 
+function noteInfo(r, origen) {
+  if (!r) return false;
+  var si = r.sourceInfo || (r.info && r.info.sourceInfo) || null;
+  // Algunos modelos devuelven las pipelines en una lista.
+  if (!si && r.pipelines && r.pipelines.length) {
+    for (var i = 0; i < r.pipelines.length; i++) {
+      var p = r.pipelines[i];
+      if (p && (p.sourceInfo || p.info)) { si = p.sourceInfo || p.info; break; }
+    }
+  }
+  if (!si) {
+    if (!TRACKS.diag) {
+      var ks = [], k;
+      for (k in r) if (r.hasOwnProperty(k)) ks.push(k);
+      TRACKS.diag = origen + " sin sourceInfo {" + ks.join(",") + "}";
+    }
+    return false;
+  }
+  TRACKS.info = si;
+  var keys = [], j;
+  for (j in si) if (si.hasOwnProperty(j)) keys.push(j);
+  TRACKS.diag = origen + " {" + keys.join(",") + "}";
+  return true;
+}
+
 function subscribeMedia(mid) {
   if (!mid) return;
   try {
@@ -671,18 +696,22 @@ function subscribeMedia(mid) {
     mediaBridge.onservicecallback = function (msg) {
       var r = null;
       try { r = JSON.parse(msg); } catch (e) { return; }
-      if (!r) return;
-      var si = r.sourceInfo || (r.info && r.info.sourceInfo) || null;
-      if (si) {
-        TRACKS.info = si;
-        var keys = [], k;
-        for (k in si) if (si.hasOwnProperty(k)) keys.push(k);
-        TRACKS.diag = keys.join(", ");
-      }
+      noteInfo(r, "subscribe");
     };
     mediaBridge.call("luna://com.webos.media/subscribe",
                      JSON.stringify({ mediaId: mid, subscribe: true }));
   } catch (e) { mediaBridge = null; }
+}
+
+/* Segunda via: consulta puntual de las pipelines activas. La suscripcion no
+   siempre llega (depende del modelo y de los permisos), y esta es sincrona
+   con la respuesta, asi que sirve de red de seguridad al abrir el menu. */
+function askPipelines(cb) {
+  var ok = luna("getActivePipelines", { subscribe: false }, function (r) {
+    var hubo = noteInfo(r, "pipelines");
+    if (cb) cb(hubo);
+  });
+  if (!ok && cb) cb(false);
 }
 
 function mediaId() {
@@ -697,12 +726,16 @@ function detectTracks() {
   TRACKS.mediaId = mediaId();
   TRACKS.via = "";
 
-  // 1. API estandar: da nombre e idioma reales.
+  // 1. API estandar: da idioma real. Los codigos vienen en ISO ("es", "eng"),
+  //    asi que hay que traducirlos igual que los del pipeline.
   try {
     if (v.audioTracks && v.audioTracks.length) {
       for (i = 0; i < v.audioTracks.length; i++) {
         var a = v.audioTracks[i];
-        TRACKS.audio.push({ i: i, name: (a.language || a.label || ("Pista " + (i + 1))) });
+        TRACKS.audio.push({
+          i: i,
+          name: prettyLang(a.language) || a.label || ("Pista " + (i + 1))
+        });
         if (a.enabled) TRACKS.aIdx = i;
       }
       TRACKS.via = "audioTracks";
@@ -713,7 +746,10 @@ function detectTracks() {
     if (v.textTracks && v.textTracks.length) {
       for (i = 0; i < v.textTracks.length; i++) {
         var t = v.textTracks[i];
-        TRACKS.text.push({ i: i, name: (t.language || t.label || ("Subtitulo " + (i + 1))) });
+        TRACKS.text.push({
+          i: i,
+          name: prettyLang(t.language) || t.label || ("Subtitulo " + (i + 1))
+        });
       }
       TRACKS.via += (TRACKS.via ? " + " : "") + "textTracks";
     }
@@ -828,6 +864,16 @@ function openTracks() {
   $("tracks").className = "on";
   UI.screen = "tracks";
   renderTracks();
+
+  // Si aun no conocemos los idiomas, se pide la informacion del pipeline y se
+  // repinta cuando llegue: es asincrona y no debe retrasar la apertura.
+  if (!TRACKS.info) {
+    askPipelines(function (hubo) {
+      if (!hubo || UI.screen !== "tracks") { renderTracks(); return; }
+      detectTracks();
+      renderTracks();
+    });
+  }
 }
 
 function closeTracks() {
