@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -16,7 +16,7 @@
   DECISIONES QUE VIENEN DE MEDIR EN LA TELE:
     - Se usa .ts para directo. El m3u8 del proveedor no trae variantes de
       bitrate y en esta TV falla con MEDIA_ERR_DECODE.
-    - 🚨 NUNCA <source type="...">: Chrome 38 consulta canPlayType y descarta
+    - ðŸš¨ NUNCA <source type="...">: Chrome 38 consulta canPlayType y descarta
       la fuente sin intentarla. El 98% de las peliculas son .mkv y
       canPlayType("video/x-matroska") devuelve "". El src va directo en el
       <video> y decide el pipeline nativo, que si sabe abrir matroska.
@@ -40,8 +40,35 @@
   .screen { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; }
   .screen.on { display: block; }
 
+  /* Chrome 38 aun necesita el prefijo para animation; transition y transform
+     ya van sin el. Se declaran las dos formas. */
+  @-webkit-keyframes entra {
+    from { opacity: 0; -webkit-transform: translate3d(-42px, 0, 0); }
+    to   { opacity: 1; -webkit-transform: translate3d(0, 0, 0); }
+  }
+  @keyframes entra {
+    from { opacity: 0; transform: translate3d(-42px, 0, 0); }
+    to   { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+  @-webkit-keyframes aparece {
+    from { opacity: 0; -webkit-transform: scale(0.96); }
+    to   { opacity: 1; -webkit-transform: scale(1); }
+  }
+  @keyframes aparece {
+    from { opacity: 0; transform: scale(0.96); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @-webkit-keyframes funde { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes funde { from { opacity: 0; } to { opacity: 1; } }
+
   /* ---------- configuracion y arranque ---------- */
-  #setup, #splash { background: #05070f; padding: 70px 90px; }
+  /* Degradado estatico: da profundidad sin coste, porque no se anima. */
+  #setup, #splash {
+    padding: 70px 90px;
+    background: #05070f;
+    background: -webkit-radial-gradient(30% 20%, circle, #1b2352 0%, #090c1c 62%, #05070f 100%);
+    background: radial-gradient(circle at 30% 20%, #1b2352 0%, #090c1c 62%, #05070f 100%);
+  }
   .brand { font-size: 62px; font-weight: 800; letter-spacing: -1px; }
   .brand span { color: #7c5cff; }
   .tag { font-size: 24px; color: #7a83b4; margin-top: 8px; }
@@ -56,23 +83,35 @@
     display: inline-block; height: 62px; line-height: 56px; padding: 0 38px;
     margin: 30px 18px 0 0; background: #141a38;
     border: 3px solid #262e5c; border-radius: 10px; font-size: 25px; font-weight: 700;
+    transition: background-color 150ms ease-out, border-color 150ms ease-out,
+                transform 150ms ease-out;
   }
-  .focus { border-color: #7c5cff; background: #232a5e; }
+  .box { transition: border-color 150ms ease-out, background-color 150ms ease-out; }
+  .focus { border-color: #7c5cff; background: #232a5e; transform: translate3d(0, -2px, 0); }
+  .btn.focus { background: #7c5cff; border-color: #a893ff; }
   .msg { margin-top: 24px; font-size: 21px; color: #ff8f8f; min-height: 28px; }
   .hint { margin-top: 20px; font-size: 20px; color: #5f679a; line-height: 1.6; }
   #splash .state { margin-top: 40px; font-size: 26px; color: #9aa2d0; }
   .bar { margin-top: 18px; width: 620px; height: 8px; background: #1a2145; border-radius: 4px; }
-  .bar i { display: block; height: 8px; width: 0; background: #7c5cff; border-radius: 4px; }
+  .bar i { display: block; height: 8px; width: 0; background: #7c5cff; border-radius: 4px;
+           transition: width 280ms ease-out; }
+  .head { transition: color 150ms ease-out; }
 
   /* ---------- navegador ---------- */
-  #browse { background: rgba(5,7,15,0.55); }
+  #browse { background: rgba(5,7,15,0.55);
+            -webkit-animation: funde 180ms ease-out; animation: funde 180ms ease-out; }
 
+  /* Las tres columnas entran escalonadas: da sensacion de fluidez y solo son
+     tres elementos animandose, no cientos. */
   #secs { position: absolute; top: 0; left: 0; width: 250px; height: 1080px;
-          background: rgba(6,8,18,0.95); border-right: 2px solid #1d2450; }
+          background: rgba(6,8,18,0.95); border-right: 2px solid #1d2450;
+          -webkit-animation: entra 220ms ease-out both; animation: entra 220ms ease-out both; }
   #cats { position: absolute; top: 0; left: 250px; width: 380px; height: 1080px;
-          background: rgba(9,12,26,0.90); border-right: 2px solid #1d2450; }
+          background: rgba(9,12,26,0.90); border-right: 2px solid #1d2450;
+          -webkit-animation: entra 220ms ease-out 60ms both; animation: entra 220ms ease-out 60ms both; }
   #cont { position: absolute; top: 0; left: 630px; width: 1290px; height: 1080px;
-          background: rgba(7,9,20,0.72); }
+          background: rgba(7,9,20,0.72);
+          -webkit-animation: entra 240ms ease-out 110ms both; animation: entra 240ms ease-out 110ms both; }
   #browse.tv #cont { width: 700px; background: rgba(7,9,20,0.80); border-right: 2px solid #1d2450; }
 
   .head { height: 84px; line-height: 84px; padding: 0 26px;
@@ -80,10 +119,17 @@
           white-space: nowrap; overflow: hidden; }
   .list { position: absolute; top: 84px; left: 0; right: 0; bottom: 0; overflow: hidden; }
 
+  /* La fila enfocada crece con una barra de acento y se desplaza un poco.
+     Solo se animan color y transform: en este hardware, animar tamanos o
+     sombras se nota en el video que corre detras. */
   .row { height: 64px; line-height: 64px; padding: 0 26px;
-         font-size: 24px; color: #b9c0e8; white-space: nowrap; overflow: hidden; }
-  .row.sel { background: #1a2150; color: #ffffff; }
-  .row.cur { background: #7c5cff; color: #ffffff; font-weight: 700; }
+         font-size: 24px; color: #b9c0e8; white-space: nowrap; overflow: hidden;
+         border-left: 5px solid transparent;
+         transition: background-color 140ms ease-out, color 140ms ease-out,
+                     border-left-color 140ms ease-out, transform 140ms ease-out; }
+  .row.sel { background: #1a2150; color: #ffffff; border-left-color: #39407a; }
+  .row.cur { background: #7c5cff; color: #ffffff; font-weight: 700;
+             border-left-color: #cdbfff; transform: translate3d(6px, 0, 0); }
   .row b { display: inline-block; width: 70px; color: #6f78ab; font-weight: 400; font-size: 20px; }
   .row.cur b { color: #e2ddff; }
   .row em { font-style: normal; color: #ffd479; margin-right: 8px; }
@@ -97,9 +143,16 @@
     position: absolute; width: 220px; height: 340px;
     border: 4px solid transparent; border-radius: 12px; overflow: hidden;
     background: #10142c;
+    transition: transform 170ms ease-out, border-color 170ms ease-out,
+                background-color 170ms ease-out;
   }
-  .cell.cur { border-color: #7c5cff; background: #1d2450; }
-  .cell img { width: 100%; height: 262px; display: block; background: #0a0d1e; }
+  .cell.cur { border-color: #7c5cff; background: #1d2450;
+              transform: scale(1.06); z-index: 5; }
+  /* Las caratulas aparecen fundidas: sin esto, entran de golpe y la rejilla
+     da un respingo cada vez que carga una. */
+  .cell img { width: 100%; height: 262px; display: block; background: #0a0d1e;
+              opacity: 0; transition: opacity 240ms ease-out; }
+  .cell img.ok { opacity: 1; }
   .cell .t { padding: 8px 10px 0 10px; font-size: 18px; line-height: 1.2;
              color: #c8cfef; height: 62px; overflow: hidden; }
   .cell.cur .t { color: #ffffff; }
@@ -165,7 +218,8 @@
   #osd { position: absolute; left: 0; right: 0; bottom: 0; height: 200px;
          padding: 32px 70px; display: none;
          background: rgba(5,7,15,0.86); border-top: 3px solid #7c5cff; }
-  #osd.on { display: block; }
+  #osd.on { display: block;
+            -webkit-animation: funde 200ms ease-out; animation: funde 200ms ease-out; }
   #osd .n { font-size: 40px; font-weight: 800; }
   #osd .c { margin-top: 8px; font-size: 22px; color: #9aa2d0; }
   #osd .s { margin-top: 10px; font-size: 20px; color: #7c5cff; }
@@ -181,6 +235,7 @@
          background: rgba(5,7,15,0.94); display: none; }
   #pin.on { display: block; }
   .pw { position: absolute; left: 560px; top: 340px; width: 800px; padding: 44px 48px;
+        -webkit-animation: aparece 200ms ease-out; animation: aparece 200ms ease-out;
         background: rgba(9,12,26,0.98); border: 3px solid #2a3161; border-radius: 18px;
         text-align: center; }
   .pw .pt { font-size: 32px; font-weight: 700; }
@@ -197,6 +252,7 @@
             background: rgba(5,7,15,0.90); display: none; }
   #resume.on { display: block; }
   .rw { position: absolute; left: 460px; top: 320px; width: 1000px; padding: 44px 48px;
+        -webkit-animation: aparece 200ms ease-out; animation: aparece 200ms ease-out;
         background: rgba(9,12,26,0.98); border: 3px solid #2a3161; border-radius: 18px; }
   .rw .rt { font-size: 34px; font-weight: 700; line-height: 1.3; }
   .rw .rs { margin-top: 14px; font-size: 23px; color: #9aa2d0; }
@@ -209,6 +265,7 @@
             background: rgba(5,7,15,0.88); display: none; }
   #tracks.on { display: block; }
   .tw { position: absolute; left: 360px; top: 170px; width: 1200px; height: 740px;
+        -webkit-animation: aparece 200ms ease-out; animation: aparece 200ms ease-out;
         background: rgba(9,12,26,0.97); border: 3px solid #2a3161; border-radius: 18px; }
   .th { height: 86px; line-height: 86px; padding: 0 36px; font-size: 26px;
         letter-spacing: 2px; color: #7c5cff; font-weight: 700; }
@@ -353,12 +410,12 @@ function store(k, v) {
 }
 
 function bareHost(h) { return trim(h).replace(/^https?:\/\//i, "").replace(/\/.*$/, ""); }
-function cut(s, n) { s = String(s == null ? "" : s); return s.length > n ? s.substring(0, n - 1) + "…" : s; }
+function cut(s, n) { s = String(s == null ? "" : s); return s.length > n ? s.substring(0, n - 1) + "â€¦" : s; }
 
-/* Sin acentos y en minusculas, para que buscar "corazon" encuentre "Corazón". */
+/* Sin acentos y en minusculas, para que buscar "corazon" encuentre "CorazÃ³n". */
 function norm(s) {
   s = String(s == null ? "" : s).toLowerCase();
-  var from = "áàäâãéèëêíìïîóòöôõúùüûñç";
+  var from = "Ã¡Ã Ã¤Ã¢Ã£Ã©Ã¨Ã«ÃªÃ­Ã¬Ã¯Ã®Ã³Ã²Ã¶Ã´ÃµÃºÃ¹Ã¼Ã»Ã±Ã§";
   var to   = "aaaaaeeeeiiiiooooouuuunc";
   var out = "";
   for (var i = 0; i < s.length; i++) {
@@ -519,7 +576,7 @@ function playChannel(id, name) {
   playUrl(id, liveUrl(id), name, null, 0);
 }
 
-/* 🚨 src directo en el <video>, SIN <source type>: con type, Chrome 38
+/* ðŸš¨ src directo en el <video>, SIN <source type>: con type, Chrome 38
    descarta la fuente si no reconoce el mime, y ninguna pelicula .mkv abria. */
 function startStream() {
   var v = $("video");
@@ -734,7 +791,7 @@ function prettyLang(code) {
    en su cabecera, al principio del fichero, y el servidor admite descargas
    parciales. Con los primeros 256 KB basta.
 
-   🚨 La descarga abre una conexion, y la cuenta solo admite UNA: por eso se
+   ðŸš¨ La descarga abre una conexion, y la cuenta solo admite UNA: por eso se
    hace justo ANTES de arrancar el video, nunca durante la reproduccion.
    --------------------------------------------------------------------- */
 
@@ -879,7 +936,7 @@ function etiquetaPista(t) {
   if (nom && nom.length < 26 && yaDicho.indexOf(norm(nom)) < 0) extra.push(nom);
 
   if (extra.length) partes.push(extra.join(" "));
-  return partes.join(" · ");
+  return partes.join(" Â· ");
 }
 
 /* Las que sigan repetidas tras etiquetar se numeran, o no habria forma de
@@ -1179,7 +1236,7 @@ function renderTracks() {
       if (c === TRACKS.col && i === TRACKS.row) cls += " cur";
       else if (arr[i].i === lists[c].sel) cls += " sel";
       h += '<div class="' + cls + '">' + esc(arr[i].name) +
-           (arr[i].i === lists[c].sel ? "  ·" : "") + "</div>";
+           (arr[i].i === lists[c].sel ? "  Â·" : "") + "</div>";
     }
     box.innerHTML = h;
   }
@@ -1187,7 +1244,7 @@ function renderTracks() {
   $("tr_info").innerHTML =
     "Metodo: " + esc(TRACKS.via || "ninguno") +
     (TRACKS.mediaId ? "" : "  (sin mediaId)") +
-    (TRACKS.diag ? "  ·  pipeline: " + esc(cut(TRACKS.diag, 90)) : "") +
+    (TRACKS.diag ? "  Â·  pipeline: " + esc(cut(TRACKS.diag, 90)) : "") +
     "<br>Izquierda y derecha cambian de columna &middot; OK aplica &middot; ATRAS cierra." +
     (ciegas ? "<br>Esta TV no publica el idioma de las pistas: prueba por numero hasta dar con la buena." : "");
 }
@@ -1666,6 +1723,7 @@ function resetGrid() {
     cells[i]._idx = -1;
     cells[i].style.display = "none";
     cells[i].childNodes[0].removeAttribute("src");
+    cells[i].childNodes[0].className = "";
   }
 }
 
@@ -1690,6 +1748,7 @@ function renderGrid() {
       c._idx = -1;
       c.style.display = "none";
       c.childNodes[0].removeAttribute("src");
+      c.childNodes[0].className = "";
     }
   }
 
@@ -1707,6 +1766,7 @@ function renderGrid() {
     c._idx = idx;
     c.childNodes[1].innerHTML = esc(cut(DATA.view[idx].name, 46));
     c.childNodes[0].removeAttribute("src");
+    c.childNodes[0].className = "";
     c.style.display = "block";
     montado[idx] = c;
   }
@@ -1738,7 +1798,12 @@ function loadGridImages() {
     if (img.getAttribute("src")) continue;
     var it = DATA.view[c._idx];
     var url = it.stream_icon || it.cover || "";
-    if (url) img.setAttribute("src", url);
+    if (!url) continue;
+    // La clase llega con la imagen ya decodificada: asi funde en vez de
+    // entrar de golpe, que es lo que hacia dar el respingo a la rejilla.
+    img.className = "";
+    img.onload = function () { this.className = "ok"; };
+    img.setAttribute("src", url);
   }
 }
 
@@ -1779,12 +1844,12 @@ function paintDetail() {
 
   var meta = [];
   if (it.year) meta.push(it.year);
-  if (it.rating && parseFloat(it.rating) > 0) meta.push("★ " + it.rating);
+  if (it.rating && parseFloat(it.rating) > 0) meta.push("â˜… " + it.rating);
   if (it.genre) meta.push(cut(it.genre, 55));
   if (it.episode_run_time) meta.push(it.episode_run_time + " min");
   var p = progOf(UI.sec, it);
   if (p && p.t > 30 && !isSeen(UI.sec, it)) meta.push("visto hasta " + fmt(p.t));
-  $("d_meta").innerHTML = esc(meta.join("   ·   "));
+  $("d_meta").innerHTML = esc(meta.join("   Â·   "));
   $("d_plot").innerHTML = esc(it.plot || "Sin sinopsis disponible.");
 }
 
@@ -1807,7 +1872,7 @@ function renderContent() {
 function buildCats(sec, raw) {
   var out = [];
   if (sec !== SEC.TV) out.push({ id: CONT_CAT, name: "CONTINUAR VIENDO" });
-  out.push({ id: FAV_CAT, name: "★  FAVORITOS" });
+  out.push({ id: FAV_CAT, name: "â˜…  FAVORITOS" });
   out.push({ id: ALL_CAT, name: sec === SEC.TV ? "TODOS LOS CANALES" : "TODO" });
   for (var i = 0; i < raw.length; i++) {
     out.push({ id: String(raw[i].category_id), name: raw[i].category_name });
@@ -2020,8 +2085,8 @@ function openItem() {
   }
   if (UI.serie) {                       // ya dentro: es un episodio
     askResume(it, "ep:" + it.id, "ep" + it.id,
-              seriesUrl(it.id, it.ext), UI.serie.info.name + " · " + it.name,
-              { list: DATA.view, idx: UI.itemIdx, serieName: UI.serie.info.name + " · " });
+              seriesUrl(it.id, it.ext), UI.serie.info.name + " Â· " + it.name,
+              { list: DATA.view, idx: UI.itemIdx, serieName: UI.serie.info.name + " Â· " });
     return;
   }
   openSeries(it);
@@ -2095,7 +2160,7 @@ function paintTimeline() {
   var pct = Math.max(0, Math.min(1, v.currentTime / v.duration));
   $("tl_bar").style.width = Math.round(pct * 1600) + "px";
   $("tl_txt").innerHTML = fmt(v.currentTime) + "  /  " + fmt(v.duration) +
-                          "   ·   izquierda y derecha saltan " + SEEK_STEP + " s";
+                          "   Â·   izquierda y derecha saltan " + SEEK_STEP + " s";
 }
 
 setInterval(function () {
@@ -2129,8 +2194,8 @@ function paintOsd() {
   } else if (UI.serie) { txt = UI.serie.info.name; }
   $("osd_cat").innerHTML = esc(txt);
   $("osd_state").innerHTML = PLAY.key
-    ? "AZUL: pistas y subtitulos  ·  PLAY/PAUSA  ·  flechas: saltar en el tiempo"
-    : "AZUL: pistas y subtitulos  ·  flechas: cambiar de canal";
+    ? "AZUL: pistas y subtitulos  Â·  PLAY/PAUSA  Â·  flechas: saltar en el tiempo"
+    : "AZUL: pistas y subtitulos  Â·  flechas: cambiar de canal";
   paintTimeline();
 }
 
@@ -2180,7 +2245,7 @@ function doSearch() {
   var cats = DATA.cats[UI.sec];
   if (cats.length && cats[0].id === SEARCH_CAT) cats.shift();
   // Sin emoji: los caracteres fuera del plano basico salen como caja en esta TV.
-  cats.unshift({ id: SEARCH_CAT, name: '»  "' + cut(q, 16) + '"  (' + res.length + ")" });
+  cats.unshift({ id: SEARCH_CAT, name: 'Â»  "' + cut(q, 16) + '"  (' + res.length + ")" });
 
   UI.serie = null;
   UI.catIdx = 0; UI.catTop = 0;
