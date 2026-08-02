@@ -823,7 +823,10 @@ function boot() {
   buildRows("cats_list");
   buildRows("chans_list");
 
-  CFG.host = store("floptv_host") || "";
+  // El host se precarga para no teclearlo con el mando: NO es una credencial.
+  // Usuario y contrasena nunca van en el codigo: este IPK se publica en un
+  // repo publico y cualquiera puede descomprimirlo.
+  CFG.host = store("floptv_host") || "aplicasmart.space:9955";
   CFG.user = store("floptv_user") || "";
   CFG.pass = store("floptv_pass") || "";
 
@@ -833,6 +836,9 @@ function boot() {
     $("f_host").value = CFG.host;
     $("f_user").value = CFG.user;
     $("f_pass").value = CFG.pass;
+    // Si el host ya viene puesto, el foco arranca en Usuario: una pulsacion
+    // menos con el mando, que es donde duele.
+    setupIdx = CFG.host ? 1 : 0;
     show("setup");
     paintSetupFocus();
   }
