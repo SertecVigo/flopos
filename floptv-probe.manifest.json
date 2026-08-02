@@ -1,15 +1,15 @@
 {
   "id": "com.flop.floptv.probe",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "type": "web",
   "title": "FlopoTV Probe",
   "appDescription": "Sonda de diagnostico: mide codecs, catalogo y reproduccion IPTV en la tele antes de construir FlopoTV",
   "iconUri": "https://sertecvigo.github.io/flopos/floptv-icon.png",
   "sourceUrl": "https://github.com/SertecVigo/flopos",
   "rootRequired": false,
-  "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.floptv.probe_1.0.2_all.ipk",
+  "ipkUrl": "https://sertecvigo.github.io/flopos/com.flop.floptv.probe_1.0.3_all.ipk",
   "ipkHash": {
-    "sha256": "d9d8c6ffc54400d4b3d061c819bf7ca06ab9cfcd804b74305abea7cc0f817590"
+    "sha256": "6458563d480f19ec9ebbf2e92c092e476f811dc9cdad79a6d3825a34721e6f3d"
   },
-  "ipkSize": 17444
+  "ipkSize": 17482
 }

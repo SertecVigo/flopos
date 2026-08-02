@@ -501,16 +501,20 @@ function testCatalog(done) {
    contra .m3u8 servido al pipeline nativo con mediaOption.
    ===================================================================== */
 
-var PLAY_SECONDS = 25;
+var PLAY_SECONDS = 20;
 
-/* Canal de respaldo (MOVISTAR DAZN 1, h264+aac, comprobado con ffprobe desde
-   el PC). La prueba de reproduccion NO debe depender de que el catalogo se
-   descargue: si falla el catalogo, lo que mas interesa medir es justamente
-   si el video tira. */
-var FALLBACK_STREAM_ID = 184;
+/* Canales fijos con codec ya verificado por ffprobe desde el PC. Se prueban
+   siempre estos, no "el primero del catalogo": la v1.0.2 acabo midiendo
+   PORTADA M+, que es MPEG-2 576p y el peor caso posible, y el numero salio
+   distorsionado. El canal HEVC es el que decide si las pantallas negras
+   tienen arreglo. */
+var TEST_CHANNELS = [
+  { id: 184,    label: "H.264 1080p (DAZN 1)",     kind: "ts" },
+  { id: 483,    label: "HEVC 1080p (DAZN LaLiga)", kind: "ts" },
+  { id: 196606, label: "MPEG-2 576p (PORTADA M+)", kind: "ts" }
+];
 
-function playTest(kind, cb) {
-  var id = R.cat.firstStreamId || FALLBACK_STREAM_ID;
+function playTest(id, kind, cb) {
   var out = { kind: kind };
 
   var v = $("v");
@@ -585,18 +589,27 @@ function playTest(kind, cb) {
 }
 
 function testPlayback(done) {
-  markStep("play", "doing", "HLS (.m3u8), " + PLAY_SECONDS + "s...");
-  playTest("hls", function (hls) {
-    R.play.hls = hls;
-    markStep("play", "doing", "TS (.ts), " + PLAY_SECONDS + "s...");
-    playTest("ts", function (ts) {
-      R.play.ts = ts;
-      var best = (hls.firstFrameMs > 0 && (ts.firstFrameMs < 0 || hls.firstFrameMs <= ts.firstFrameMs)) ? "HLS" : "TS";
-      var any = hls.firstFrameMs > 0 || ts.firstFrameMs > 0;
-      markStep("play", any ? "done" : "fail", any ? "mejor: " + best : "ningun formato arranco");
-      done();
+  var i = 0;
+  R.play.channels = [];
+
+  function next() {
+    if (i >= TEST_CHANNELS.length) {
+      var ok = 0;
+      for (var k = 0; k < R.play.channels.length; k++) {
+        if (R.play.channels[k].firstFrameMs > 0) ok++;
+      }
+      markStep("play", ok ? "done" : "fail", ok + " de " + TEST_CHANNELS.length + " arrancaron");
+      return done();
+    }
+    var c = TEST_CHANNELS[i];
+    markStep("play", "doing", c.label + " (" + PLAY_SECONDS + "s)...");
+    playTest(c.id, c.kind, function (out) {
+      out.label = c.label;
+      R.play.channels.push(out);
+      i++; next();
     });
-  });
+  }
+  next();
 }
 
 /* =====================================================================
@@ -705,25 +718,22 @@ function render() {
       h += line(x.label, x.error, "bad");
       if (x.snippet) h += line("  respuesta", x.snippet, "warn");
     } else {
-      h += line(x.label, x.items + " items &middot; " + x.kb + " KB &middot; red " +
-                x.downloadMs + " ms &middot; parseo " + x.parseMs + " ms",
+      h += line(x.label, x.items + " items · " + x.kb + " KB · red " +
+                x.downloadMs + " ms · parseo " + x.parseMs + " ms",
                 x.parseMs > 1500 ? "bad" : (x.parseMs > 500 ? "warn" : "ok"));
     }
   }
   h += "</div>";
 
-  h += '<div class="card"><h2>REPRODUCCION</h2>';
-  h += line("Canal de prueba",
-            R.cat.firstStreamName || ("respaldo id " + FALLBACK_STREAM_ID),
-            R.cat.firstStreamName ? "" : "warn");
-  var kinds = [["HLS (.m3u8)", R.play.hls], ["TS (.ts)", R.play.ts]];
-  for (var j = 0; j < kinds.length; j++) {
-    var p = kinds[j][1];
-    if (!p) { h += line(kinds[j][0], "no ejecutado", "bad"); continue; }
-    if (p.error) { h += line(kinds[j][0], p.error, "bad"); continue; }
-    if (p.firstFrameMs < 0) { h += line(kinds[j][0], "no arranco en " + PLAY_SECONDS + "s", "bad"); continue; }
-    h += line(kinds[j][0],
-              "1er frame " + p.firstFrameMs + " ms &middot; " + p.playedSec + "s reproducidos &middot; " +
+  h += '<div class="card"><h2>REPRODUCCION (' + PLAY_SECONDS + 's por canal)</h2>';
+  var chs = R.play.channels || [];
+  if (!chs.length) h += line("Reproduccion", "no ejecutada", "bad");
+  for (var j = 0; j < chs.length; j++) {
+    var p = chs[j];
+    if (p.error) { h += line(p.label, p.error, "bad"); continue; }
+    if (p.firstFrameMs < 0) { h += line(p.label, "no arranco en " + PLAY_SECONDS + "s", "bad"); continue; }
+    h += line(p.label,
+              "1er frame " + p.firstFrameMs + " ms · " + p.playedSec + "s vistos · " +
               p.rebuffers + " cortes",
               p.rebuffers === 0 ? "ok" : (p.rebuffers < 3 ? "warn" : "bad"));
   }
