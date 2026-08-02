@@ -104,6 +104,12 @@
              color: #c8cfef; height: 62px; overflow: hidden; }
   .cell.cur .t { color: #ffffff; }
   .cell .f { position: absolute; top: 8px; right: 10px; font-size: 26px; color: #ffd479; }
+  /* Marca de visto y barra de progreso, al estilo de las plataformas de video */
+  .cell .w { position: absolute; top: 6px; left: 8px; font-size: 22px; color: #6ee7a8;
+             background: rgba(5,7,15,0.75); border-radius: 14px; padding: 0 9px; }
+  .cell .pb { position: absolute; left: 0; top: 250px; width: 100%; height: 6px;
+              background: rgba(0,0,0,0.55); display: none; }
+  .cell .pb i { display: block; height: 6px; background: #7c5cff; }
 
   /* ---------- ficha ---------- */
   #detail { position: absolute; left: 26px; width: 1240px; top: 806px; height: 244px;
@@ -140,9 +146,27 @@
          padding: 32px 70px; display: none;
          background: rgba(5,7,15,0.86); border-top: 3px solid #7c5cff; }
   #osd.on { display: block; }
-  #osd .n { font-size: 44px; font-weight: 800; }
-  #osd .c { margin-top: 10px; font-size: 23px; color: #9aa2d0; }
-  #osd .s { margin-top: 12px; font-size: 21px; color: #7c5cff; }
+  #osd .n { font-size: 40px; font-weight: 800; }
+  #osd .c { margin-top: 8px; font-size: 22px; color: #9aa2d0; }
+  #osd .s { margin-top: 10px; font-size: 20px; color: #7c5cff; }
+  /* Linea de tiempo: solo aparece cuando el medio tiene duracion (VOD) */
+  #tl { margin-top: 14px; display: none; }
+  #tl.on { display: block; }
+  #tl .tb { position: relative; width: 1600px; height: 10px; background: #232a5e; border-radius: 5px; }
+  #tl .tb i { display: block; height: 10px; background: #7c5cff; border-radius: 5px; }
+  #tl .tt { margin-top: 8px; font-size: 22px; color: #9aa2d0; }
+
+  /* ---------- dialogo de reanudar ---------- */
+  #resume { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+            background: rgba(5,7,15,0.90); display: none; }
+  #resume.on { display: block; }
+  .rw { position: absolute; left: 460px; top: 320px; width: 1000px; padding: 44px 48px;
+        background: rgba(9,12,26,0.98); border: 3px solid #2a3161; border-radius: 18px; }
+  .rw .rt { font-size: 34px; font-weight: 700; line-height: 1.3; }
+  .rw .rs { margin-top: 14px; font-size: 23px; color: #9aa2d0; }
+  .rw .ro { margin-top: 30px; }
+  .rw .ro .row { height: 70px; line-height: 70px; padding: 0 24px; font-size: 26px;
+                 border-radius: 10px; }
 
   /* ---------- selector de pistas ---------- */
   #tracks { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
@@ -233,10 +257,22 @@
   </div>
 </div>
 
+<div id="resume">
+  <div class="rw">
+    <div class="rt" id="rs_title">&nbsp;</div>
+    <div class="rs" id="rs_sub">&nbsp;</div>
+    <div class="ro" id="rs_opts"></div>
+  </div>
+</div>
+
 <div id="osd">
   <div class="n" id="osd_name">&nbsp;</div>
   <div class="c" id="osd_cat">&nbsp;</div>
   <div class="s" id="osd_state">&nbsp;</div>
+  <div id="tl">
+    <div class="tb"><i id="tl_bar"></i></div>
+    <div class="tt" id="tl_txt">&nbsp;</div>
+  </div>
 </div>
 <div id="status"></div>
 
@@ -382,30 +418,39 @@ function apiGet(qs, cb) {
 var PLAY = {
   id: null, url: null, tries: 0,
   backoff: [2000, 5000, 15000, 30000],
-  timer: null, watchdog: null, lastTime: -1, stalls: 0
+  timer: null, watchdog: null, lastTime: -1, stalls: 0,
+  key: null,          // clave de progreso (null en directo)
+  resumeTo: 0,        // segundos a los que saltar cuando haya metadatos
+  saveTimer: null,
+  ep: null            // { list, idx } de la temporada, para encadenar episodios
 };
 
 function stopWatchdog() {
   if (PLAY.watchdog) { clearInterval(PLAY.watchdog); PLAY.watchdog = null; }
   if (PLAY.timer) { clearTimeout(PLAY.timer); PLAY.timer = null; }
+  if (PLAY.saveTimer) { clearInterval(PLAY.saveTimer); PLAY.saveTimer = null; }
 }
 
 /* Al salir de TV se corta del todo: libera la unica conexion de la cuenta
    para que la pelicula pueda abrirse. */
 function stopPlayback() {
+  recordProgress();                 // guardar antes de soltar el medio
   stopWatchdog();
   var v = $("video");
   try { v.pause(); } catch (e) {}
   try { v.removeAttribute("src"); v.load(); } catch (e2) {}
-  PLAY.id = null; PLAY.url = null; PLAY.tries = 0;
+  PLAY.id = null; PLAY.url = null; PLAY.tries = 0; PLAY.key = null; PLAY.resumeTo = 0;
   UI.playingId = null;
   setStatus("");
 }
 
-function playUrl(id, url, name) {
+function playUrl(id, url, name, key, resumeTo) {
   id = String(id);
   if (id === String(PLAY.id) && !PLAY.tries) { UI.playingName = name || UI.playingName; return; }
+  recordProgress();                 // guardar lo que se estaba viendo antes
   PLAY.id = id; PLAY.url = url; PLAY.tries = 0;
+  PLAY.key = key || null;
+  PLAY.resumeTo = resumeTo || 0;
   UI.playingId = id; UI.playingName = name || "";
   startStream();
   paintOsd();
@@ -413,7 +458,7 @@ function playUrl(id, url, name) {
 
 function playChannel(id, name) {
   store("floptv_last", String(id));
-  playUrl(id, liveUrl(id), name);
+  playUrl(id, liveUrl(id), name, null, 0);
 }
 
 /* 🚨 src directo en el <video>, SIN <source type>: con type, Chrome 38
@@ -428,6 +473,9 @@ function startStream() {
   setStatus(PLAY.tries ? "Reconectando (" + PLAY.tries + ")..." : "Cargando...");
 
   try { v.load(); v.play(); } catch (e) { scheduleRetry("no se pudo iniciar"); return; }
+
+  // Guardado periodico del punto de reproduccion (solo peliculas y episodios).
+  if (PLAY.key) PLAY.saveTimer = setInterval(recordProgress, 10000);
 
   PLAY.watchdog = setInterval(function () {
     // En pausa o al terminar, el tiempo no avanza y eso no es un fallo.
@@ -464,7 +512,47 @@ function scheduleRetry(motivo) {
     scheduleRetry("error de video" + (e ? " (" + e.code + ")" : ""));
   }, true);
   v.addEventListener("playing", function () { setStatus(""); }, false);
+
+  // El salto solo es posible cuando ya hay metadatos; antes, currentTime se ignora.
+  v.addEventListener("loadedmetadata", function () {
+    if (PLAY.resumeTo > 0) {
+      var to = PLAY.resumeTo;
+      PLAY.resumeTo = 0;
+      try { v.currentTime = to; setStatus("Reanudando en " + fmt(to)); } catch (e) {}
+      setTimeout(function () { setStatus(""); }, 2500);
+    }
+  }, false);
+
+  // Al terminar queda marcado como visto y, si es una serie, encadena.
+  v.addEventListener("ended", function () {
+    if (!PLAY.key) return;
+    var d = v.duration;
+    PROG[PLAY.key] = { t: (isFinite(d) && d > 0) ? Math.floor(d) : 0,
+                       d: (isFinite(d) && d > 0) ? Math.floor(d) : 0, ts: nowSec() };
+    saveProg();
+    playNextEpisode();
+  }, false);
 })();
+
+/* Siguiente episodio de la temporada. La lista se guarda al arrancar el
+   episodio y no se lee de DATA.view: el usuario puede haber cambiado de
+   temporada o de seccion mientras se reproducia. */
+function playNextEpisode() {
+  if (!PLAY.ep || !PLAY.ep.list) return;
+  var next = PLAY.ep.idx + 1;
+  if (next >= PLAY.ep.list.length) {
+    setStatus("Fin de la temporada");
+    setTimeout(function () { setStatus(""); }, 4000);
+    return;
+  }
+  var e = PLAY.ep.list[next];
+  var ctx = { list: PLAY.ep.list, idx: next, serieName: PLAY.ep.serieName };
+  setStatus("Siguiente: " + cut(e.name, 40));
+
+  playUrl("ep" + e.id, seriesUrl(e.id, e.ext), (ctx.serieName || "") + e.name, "ep:" + e.id, 0);
+  PLAY.ep = ctx;                 // despues de playUrl: el arranque no debe perderlo
+  flashOsd();
+}
 
 function togglePause() {
   var v = $("video");
@@ -642,6 +730,71 @@ function renderTracks() {
 }
 
 /* =====================================================================
+   5c. Progreso de reproduccion (peliculas y episodios)
+
+   Se guarda { t: segundos vistos, d: duracion, ts: cuando } por titulo. El
+   servidor responde 206 Partial Content, asi que reanudar es un seek normal.
+   Solo aplica a VOD y series: en un directo no hay donde volver.
+   ===================================================================== */
+
+var PROG = {};
+var PROG_MAX = 400;              // se podan los mas antiguos para no llenar localStorage
+var VISTO = 0.92;                // a partir de aqui se considera terminado
+
+function loadProg() {
+  try { PROG = JSON.parse(store("floptv_prog") || "{}") || {}; } catch (e) { PROG = {}; }
+}
+
+function saveProg() {
+  // Poda por antiguedad: localStorage es pequeno y esto crece con cada titulo.
+  var keys = [], k;
+  for (k in PROG) if (PROG.hasOwnProperty(k)) keys.push(k);
+  if (keys.length > PROG_MAX) {
+    keys.sort(function (a, b) { return (PROG[a].ts || 0) - (PROG[b].ts || 0); });
+    for (var i = 0; i < keys.length - PROG_MAX; i++) delete PROG[keys[i]];
+  }
+  store("floptv_prog", JSON.stringify(PROG));
+}
+
+function progKey(sec, it) {
+  if (UI.serie && it.id !== undefined) return "ep:" + it.id;
+  return SEC_PREFIX[sec] + ":" + idOf(it);
+}
+
+function progOf(sec, it) { return PROG[progKey(sec, it)] || null; }
+
+function isSeen(sec, it) {
+  var p = progOf(sec, it);
+  return !!(p && p.d && p.t >= p.d * VISTO);
+}
+
+function progPct(sec, it) {
+  var p = progOf(sec, it);
+  if (!p || !p.d) return 0;
+  var r = p.t / p.d;
+  return r < 0 ? 0 : (r > 1 ? 1 : r);
+}
+
+/* Se llama cada 10 s mientras hay pelicula, y al salir. */
+function recordProgress() {
+  if (!PLAY.key) return;
+  var v = $("video");
+  var t = v.currentTime, d = v.duration;
+  if (!t || !isFinite(t) || t < 5) return;
+  PROG[PLAY.key] = { t: Math.floor(t), d: (isFinite(d) && d > 0) ? Math.floor(d) : 0, ts: nowSec() };
+  saveProg();
+}
+
+function nowSec() { return Math.floor(new Date().getTime() / 1000); }
+
+function fmt(s) {
+  s = Math.max(0, Math.floor(s || 0));
+  var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+  function dd(n) { return n < 10 ? "0" + n : "" + n; }
+  return h > 0 ? (h + ":" + dd(m) + ":" + dd(x)) : (m + ":" + dd(x));
+}
+
+/* =====================================================================
    6. Favoritos (separados por seccion: los ids se repiten entre catalogos)
    ===================================================================== */
 
@@ -766,7 +919,8 @@ function buildGrid() {
     var d = document.createElement("div");
     d.className = "cell";
     d.style.display = "none";
-    d.innerHTML = '<img alt=""><div class="t"></div><div class="f"></div>';
+    d.innerHTML = '<img alt=""><div class="t"></div><div class="f"></div>' +
+                  '<div class="w"></div><div class="pb"><i></i></div>';
     d._idx = -1;
     g.appendChild(d);
   }
@@ -854,12 +1008,27 @@ function loadGridImages() {
   }
 }
 
+/* Favorito (estrella), visto (marca) y cuanto llevas (barra). Se repinta en
+   cada render porque es barato: son diez nodos de texto, no imagenes. */
 function markGridFav() {
   var cells = $("grid").childNodes;
   for (var i = 0; i < POOL; i++) {
     var c = cells[i];
     if (c._idx < 0 || c._idx >= DATA.view.length) continue;
-    c.childNodes[2].innerHTML = (!UI.serie && isFav(DATA.view[c._idx])) ? "&#9733;" : "";
+    var it = DATA.view[c._idx];
+
+    c.childNodes[2].innerHTML = (!UI.serie && isFav(it)) ? "&#9733;" : "";
+
+    var visto = isSeen(UI.sec, it);
+    c.childNodes[3].innerHTML = visto ? "&#10003;" : "";
+
+    var pb = c.childNodes[4], pct = progPct(UI.sec, it);
+    if (pct > 0.01 && !visto) {
+      pb.style.display = "block";
+      pb.childNodes[0].style.width = Math.round(pct * 100) + "%";
+    } else {
+      pb.style.display = "none";
+    }
   }
 }
 
@@ -870,13 +1039,17 @@ function paintDetail() {
     $("d_meta").innerHTML = ""; $("d_plot").innerHTML = "";
     return;
   }
-  $("d_title").innerHTML = esc(it.name) + (!UI.serie && isFav(it) ? '  <span style="color:#ffd479">&#9733;</span>' : "");
+  $("d_title").innerHTML = esc(it.name) +
+    (!UI.serie && isFav(it) ? '  <span style="color:#ffd479">&#9733;</span>' : "") +
+    (isSeen(UI.sec, it) ? '  <span style="color:#6ee7a8">&#10003; visto</span>' : "");
 
   var meta = [];
   if (it.year) meta.push(it.year);
   if (it.rating && parseFloat(it.rating) > 0) meta.push("★ " + it.rating);
   if (it.genre) meta.push(cut(it.genre, 55));
   if (it.episode_run_time) meta.push(it.episode_run_time + " min");
+  var p = progOf(UI.sec, it);
+  if (p && p.t > 30 && !isSeen(UI.sec, it)) meta.push("visto hasta " + fmt(p.t));
   $("d_meta").innerHTML = esc(meta.join("   ·   "));
   $("d_plot").innerHTML = esc(it.plot || "Sin sinopsis disponible.");
 }
@@ -1070,15 +1243,60 @@ function openItem() {
   if (UI.previewTimer) clearTimeout(UI.previewTimer);
 
   if (UI.sec === SEC.TV) { playChannel(it.stream_id, it.name); show(null); flashOsd(); return; }
+
   if (UI.sec === SEC.VOD) {
-    playUrl(it.stream_id, movieUrl(it.stream_id, it.container_extension), it.name);
-    show(null); flashOsd(); return;
+    askResume(it, "vod:" + it.stream_id, it.stream_id,
+              movieUrl(it.stream_id, it.container_extension), it.name);
+    return;
   }
   if (UI.serie) {                       // ya dentro: es un episodio
-    playUrl("ep" + it.id, seriesUrl(it.id, it.ext), UI.serie.info.name + " · " + it.name);
-    show(null); flashOsd(); return;
+    askResume(it, "ep:" + it.id, "ep" + it.id,
+              seriesUrl(it.id, it.ext), UI.serie.info.name + " · " + it.name,
+              { list: DATA.view, idx: UI.itemIdx, serieName: UI.serie.info.name + " · " });
+    return;
   }
   openSeries(it);
+}
+
+function startItem(key, id, url, name, from, ep) {
+  playUrl(id, url, name, key, from);
+  PLAY.ep = ep || null;
+  show(null);
+  flashOsd();
+}
+
+/* Si hay un punto guardado que no sea el principio ni el final, se pregunta.
+   Sin eso, volver a una pelicula a medias obligaria a buscar el punto a mano. */
+var RESUME = null;
+
+function askResume(it, key, id, url, name, ep) {
+  var p = PROG[key];
+  var terminada = p && p.d && p.t >= p.d * VISTO;
+  if (!p || p.t < 30 || terminada) { startItem(key, id, url, name, 0, ep); return; }
+
+  RESUME = { key: key, id: id, url: url, name: name, t: p.t, row: 0, ep: ep };
+  $("rs_title").innerHTML = esc(cut(name, 60));
+  $("rs_sub").innerHTML = "Lo dejaste en " + fmt(p.t) + (p.d ? " de " + fmt(p.d) : "");
+  $("resume").className = "on";
+  UI.screen = "resume";
+  renderResume();
+}
+
+function renderResume() {
+  var opts = ["Seguir desde " + fmt(RESUME.t), "Empezar de nuevo"];
+  var h = "";
+  for (var i = 0; i < opts.length; i++) {
+    h += '<div class="row' + (i === RESUME.row ? " cur" : "") + '">' + esc(opts[i]) + "</div>";
+  }
+  $("rs_opts").innerHTML = h;
+}
+
+function closeResume(empezarEn) {
+  $("resume").className = "";
+  var r = RESUME;
+  RESUME = null;
+  if (empezarEn === null) { show("browse"); renderSecs(); renderCats(); renderContent(); return; }
+  startItem(r.key, r.id, r.url, r.name, empezarEn, r.ep);
 }
 
 function flashOsd() {
@@ -1086,6 +1304,38 @@ function flashOsd() {
   $("osd").className = "on";
   if (UI.osdTimer) clearTimeout(UI.osdTimer);
   UI.osdTimer = setTimeout(function () { $("osd").className = ""; }, 4000);
+}
+
+/* Linea de tiempo: se refresca sola mientras el OSD esta visible. En directo
+   no hay duracion, asi que ni se muestra. */
+function paintTimeline() {
+  var v = $("video"), tl = $("tl");
+  if (!PLAY.key || !isFinite(v.duration) || v.duration <= 0) { tl.className = ""; return; }
+  tl.className = "on";
+  var pct = Math.max(0, Math.min(1, v.currentTime / v.duration));
+  $("tl_bar").style.width = Math.round(pct * 1600) + "px";
+  $("tl_txt").innerHTML = fmt(v.currentTime) + "  /  " + fmt(v.duration) +
+                          "   ·   izquierda y derecha saltan " + SEEK_STEP + " s";
+}
+
+setInterval(function () {
+  if ($("osd").className === "on") paintTimeline();
+}, 1000);
+
+var SEEK_STEP = 30;
+
+/* Salto relativo. Solo tiene sentido en peliculas y episodios: en un directo
+   el servidor manda su propio punto y currentTime no se puede mover. */
+function seekBy(delta) {
+  var v = $("video");
+  if (!PLAY.key || !isFinite(v.duration) || v.duration <= 0) return false;
+  var t = v.currentTime + delta;
+  if (t < 0) t = 0;
+  if (t > v.duration - 5) t = v.duration - 5;
+  try { v.currentTime = t; } catch (e) { return false; }
+  flashOsd();
+  paintTimeline();
+  return true;
 }
 
 function paintOsd() {
@@ -1098,7 +1348,10 @@ function paintOsd() {
     }
   } else if (UI.serie) { txt = UI.serie.info.name; }
   $("osd_cat").innerHTML = esc(txt);
-  $("osd_state").innerHTML = "AZUL: pistas de audio y subtitulos";
+  $("osd_state").innerHTML = PLAY.key
+    ? "AZUL: pistas y subtitulos  ·  PLAY/PAUSA  ·  flechas: saltar en el tiempo"
+    : "AZUL: pistas y subtitulos  ·  flechas: cambiar de canal";
+  paintTimeline();
 }
 
 function step(delta) {
@@ -1235,6 +1488,13 @@ document.addEventListener("keydown", function (e) {
     e.preventDefault(); return;
   }
 
+  if (UI.screen === "resume") {
+    if (k === KEY.UP || k === KEY.DOWN) { RESUME.row = RESUME.row ? 0 : 1; renderResume(); }
+    if (k === KEY.OK)   { closeResume(RESUME.row === 0 ? RESUME.t : 0); }
+    if (k === KEY.BACK) { closeResume(null); }
+    e.preventDefault(); return;
+  }
+
   if (UI.screen === "tracks") {
     var arr = TRACKS.col === 0 ? TRACKS.audio : TRACKS.text;
     var max = Math.min(arr.length, 8);
@@ -1292,8 +1552,11 @@ document.addEventListener("keydown", function (e) {
     show("browse"); renderSecs(); renderCats(); renderContent(); e.preventDefault(); return;
   }
   if (k === KEY.UP) { flashOsd(); e.preventDefault(); return; }
-  if (k === KEY.CH_UP   || k === KEY.RIGHT) { step(1);  e.preventDefault(); return; }
-  if (k === KEY.CH_DOWN || k === KEY.LEFT)  { step(-1); e.preventDefault(); return; }
+  // En pelicula, izquierda y derecha saltan en el tiempo; en directo, cambian de canal.
+  if (k === KEY.RIGHT) { if (!seekBy(SEEK_STEP))  step(1);  e.preventDefault(); return; }
+  if (k === KEY.LEFT)  { if (!seekBy(-SEEK_STEP)) step(-1); e.preventDefault(); return; }
+  if (k === KEY.CH_UP)   { step(1);  e.preventDefault(); return; }
+  if (k === KEY.CH_DOWN) { step(-1); e.preventDefault(); return; }
   if (k === KEY.YELLOW) { toggleFav(); flashOsd(); e.preventDefault(); return; }
 }, false);
 
@@ -1365,6 +1628,7 @@ function boot() {
   show("splash");
   splash("Conectando...", 8, "");
   loadFavs();
+  loadProg();
 
   // El video arranca ANTES que el catalogo y en paralelo: el pipeline de
   // webOS tarda ~7,7 s la primera vez y asi se solapa con la descarga.
