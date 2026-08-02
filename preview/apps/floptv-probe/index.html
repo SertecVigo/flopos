@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=1920, height=1080, initial-scale=1">
-<title>FlopTV Probe</title>
+<title>FlopoTV Probe</title>
 <!--
   SONDA DE DIAGNOSTICO - Fase 0 de FlopTV.
   OBJETIVO: medir en la TV real (webOS ~3.x / Chrome 38) lo que no se puede
@@ -84,7 +84,7 @@
 
 <!-- ============ 1. CONFIGURACION ============ -->
 <div id="setup" class="screen on">
-  <h1>FlopTV <span>Probe</span></h1>
+  <h1>FlopoTV <span>Probe</span></h1>
   <div class="sub">Diagnostico de la tele antes de construir la app. Tarda unos 2 minutos.</div>
 
   <div class="field">
@@ -122,7 +122,7 @@
 
 <!-- ============ 3. INFORME ============ -->
 <div id="report" class="screen">
-  <h1>Informe <span>FlopTV</span></h1>
+  <h1>Informe <span>FlopoTV</span></h1>
   <div class="cols">
     <div class="col" id="colA"></div>
     <div class="col" id="colB"></div>
@@ -739,7 +739,10 @@ function render() {
    ===================================================================== */
 
 (function init() {
-  $("f_host").value = store("floptv_host") || "";
+  // El host NO es una credencial: se precarga para ahorrar teclear con el
+  // mando. Usuario y contrasena NUNCA van en el codigo, porque este IPK se
+  // publica en un repo publico y cualquiera puede descomprimirlo.
+  $("f_host").value = store("floptv_host") || "aplicasmart.space:9955";
   $("f_user").value = store("floptv_user") || "";
   $("f_pass").value = store("floptv_pass") || "";
   paintFocus();
