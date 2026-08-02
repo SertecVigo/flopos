@@ -112,12 +112,13 @@
   .cell .pb i { display: block; height: 6px; background: #7c5cff; }
 
   /* ---------- ficha ---------- */
-  #detail { position: absolute; left: 26px; width: 1240px; top: 806px; height: 244px;
-            padding: 20px 26px; background: rgba(9,12,26,0.94);
+  /* Acortada para dejar sitio a la ayuda debajo, en vez de encima. */
+  #detail { position: absolute; left: 26px; width: 1240px; top: 800px; height: 208px;
+            padding: 18px 26px; background: rgba(9,12,26,0.94);
             border: 2px solid #1d2450; border-radius: 14px; }
-  #detail .dt { font-size: 30px; font-weight: 700; }
-  #detail .dm { margin-top: 8px; font-size: 20px; color: #7c5cff; }
-  #detail .dp { margin-top: 10px; font-size: 19px; color: #9aa2d0; line-height: 1.45; height: 84px; overflow: hidden; }
+  #detail .dt { font-size: 29px; font-weight: 700; white-space: nowrap; overflow: hidden; }
+  #detail .dm { margin-top: 6px; font-size: 20px; color: #7c5cff; }
+  #detail .dp { margin-top: 8px; font-size: 19px; color: #9aa2d0; line-height: 1.42; height: 82px; overflow: hidden; }
 
   #info { position: absolute; left: 1360px; top: 84px; width: 520px;
           padding: 24px 26px; background: rgba(9,12,26,0.92);
@@ -128,9 +129,18 @@
   #keys { position: absolute; left: 1360px; bottom: 36px; width: 520px;
           font-size: 19px; color: #5f679a; line-height: 1.75; }
   #keys u { text-decoration: none; color: #9aa2d0; }
-  #browse.vod #keys, #browse.series #keys { left: 1290px; bottom: 20px; width: 610px; }
-  #browse.vod #info, #browse.series #info { display: none; }
-  #browse.tv #grid, #browse.tv #detail { display: none; }
+
+  /* Cada seccion oculta lo que no le toca. Sin esto, la lista de canales
+     seguia pintada por detras de las caratulas en peliculas y series. */
+  #browse.tv     #grid, #browse.tv #detail { display: none; }
+  #browse.vod    #chans_list, #browse.series #chans_list { display: none; }
+  #browse.vod    #info, #browse.series #info { display: none; }
+  /* La ayuda va debajo de la ficha, no flotando sobre ella: #keys se situa
+     respecto a la pantalla y la ficha empieza en la columna de contenido. */
+  #browse.vod #keys, #browse.series #keys {
+    left: 656px; width: 1240px; bottom: 10px; text-align: right;
+    font-size: 18px; line-height: 1.5;
+  }
 
   /* ---------- buscador ---------- */
   #search { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
@@ -1370,10 +1380,14 @@ function openSeries(serie) {
       var arr = info.episodes[k], eps = [];
       for (j = 0; j < arr.length; j++) {
         var e = arr[j];
+        // Muchos titulos ya vienen como "Serie - S01E06 - Rya": anteponer
+        // "E6" ademas queda redundante, asi que solo se pone si falta.
+        var tit = trim(e.title || "");
+        var yaNumerado = /s\d{1,2}\s*e\d{1,3}/i.test(tit) || /^e\d{1,3}\b/i.test(tit);
         eps.push({
           id: e.id,
           ext: e.container_extension,
-          name: "E" + (e.episode_num || (j + 1)) + "  " + (e.title || ""),
+          name: yaNumerado ? tit : ("E" + (e.episode_num || (j + 1)) + "  " + tit),
           plot: (e.info && e.info.plot) || serie.plot,
           stream_icon: (e.info && e.info.movie_image) || serie.cover,
           year: serie.year
