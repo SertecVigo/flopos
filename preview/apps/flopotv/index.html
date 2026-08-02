@@ -16,7 +16,7 @@
   DECISIONES QUE VIENEN DE MEDIR EN LA TELE:
     - Se usa .ts para directo. El m3u8 del proveedor no trae variantes de
       bitrate y en esta TV falla con MEDIA_ERR_DECODE.
-    - ðŸš¨ NUNCA <source type="...">: Chrome 38 consulta canPlayType y descarta
+    - NUNCA <source type="...">: Chrome 38 consulta canPlayType y descarta
       la fuente sin intentarla. El 98% de las peliculas son .mkv y
       canPlayType("video/x-matroska") devuelve "". El src va directo en el
       <video> y decide el pipeline nativo, que si sabe abrir matroska.
@@ -410,12 +410,17 @@ function store(k, v) {
 }
 
 function bareHost(h) { return trim(h).replace(/^https?:\/\//i, "").replace(/\/.*$/, ""); }
-function cut(s, n) { s = String(s == null ? "" : s); return s.length > n ? s.substring(0, n - 1) + "â€¦" : s; }
+function cut(s, n) { s = String(s == null ? "" : s); return s.length > n ? s.substring(0, n - 1) + "\u2026" : s; }
 
-/* Sin acentos y en minusculas, para que buscar "corazon" encuentre "CorazÃ³n". */
+/* Sin acentos y en minusculas, para que buscar "corazon" encuentre "Coraz\u00f3n". */
 function norm(s) {
   s = String(s == null ? "" : s).toLowerCase();
-  var from = "Ã¡Ã Ã¤Ã¢Ã£Ã©Ã¨Ã«ÃªÃ­Ã¬Ã¯Ã®Ã³Ã²Ã¶Ã´ÃµÃºÃ¹Ã¼Ã»Ã±Ã§";
+  var from = "\u00e1\u00e0\u00e4\u00e2\u00e3" +   // a
+             "\u00e9\u00e8\u00eb\u00ea" +         // e
+             "\u00ed\u00ec\u00ef\u00ee" +         // i
+             "\u00f3\u00f2\u00f6\u00f4\u00f5" +   // o
+             "\u00fa\u00f9\u00fc\u00fb" +         // u
+             "\u00f1\u00e7";                      // n, c
   var to   = "aaaaaeeeeiiiiooooouuuunc";
   var out = "";
   for (var i = 0; i < s.length; i++) {
@@ -576,7 +581,7 @@ function playChannel(id, name) {
   playUrl(id, liveUrl(id), name, null, 0);
 }
 
-/* ðŸš¨ src directo en el <video>, SIN <source type>: con type, Chrome 38
+/* \u00f0\u0178\u0161\u00a8 src directo en el <video>, SIN <source type>: con type, Chrome 38
    descarta la fuente si no reconoce el mime, y ninguna pelicula .mkv abria. */
 function startStream() {
   var v = $("video");
@@ -791,7 +796,7 @@ function prettyLang(code) {
    en su cabecera, al principio del fichero, y el servidor admite descargas
    parciales. Con los primeros 256 KB basta.
 
-   ðŸš¨ La descarga abre una conexion, y la cuenta solo admite UNA: por eso se
+   \u00f0\u0178\u0161\u00a8 La descarga abre una conexion, y la cuenta solo admite UNA: por eso se
    hace justo ANTES de arrancar el video, nunca durante la reproduccion.
    --------------------------------------------------------------------- */
 
@@ -936,7 +941,7 @@ function etiquetaPista(t) {
   if (nom && nom.length < 26 && yaDicho.indexOf(norm(nom)) < 0) extra.push(nom);
 
   if (extra.length) partes.push(extra.join(" "));
-  return partes.join(" Â· ");
+  return partes.join(" \u00b7 ");
 }
 
 /* Las que sigan repetidas tras etiquetar se numeran, o no habria forma de
@@ -1236,7 +1241,7 @@ function renderTracks() {
       if (c === TRACKS.col && i === TRACKS.row) cls += " cur";
       else if (arr[i].i === lists[c].sel) cls += " sel";
       h += '<div class="' + cls + '">' + esc(arr[i].name) +
-           (arr[i].i === lists[c].sel ? "  Â·" : "") + "</div>";
+           (arr[i].i === lists[c].sel ? "  \u00b7" : "") + "</div>";
     }
     box.innerHTML = h;
   }
@@ -1244,7 +1249,7 @@ function renderTracks() {
   $("tr_info").innerHTML =
     "Metodo: " + esc(TRACKS.via || "ninguno") +
     (TRACKS.mediaId ? "" : "  (sin mediaId)") +
-    (TRACKS.diag ? "  Â·  pipeline: " + esc(cut(TRACKS.diag, 90)) : "") +
+    (TRACKS.diag ? "  \u00b7  pipeline: " + esc(cut(TRACKS.diag, 90)) : "") +
     "<br>Izquierda y derecha cambian de columna &middot; OK aplica &middot; ATRAS cierra." +
     (ciegas ? "<br>Esta TV no publica el idioma de las pistas: prueba por numero hasta dar con la buena." : "");
 }
@@ -1304,7 +1309,7 @@ function recordProgress() {
   if (!t || !isFinite(t) || t < 5) return;
   PROG[PLAY.key] = { t: Math.floor(t), d: (isFinite(d) && d > 0) ? Math.floor(d) : 0, ts: nowSec() };
   saveProg();
-  if (t > 30) touchCont();
+  if (t > CONT_MIN) touchCont();
 }
 
 function nowSec() { return Math.floor(new Date().getTime() / 1000); }
@@ -1318,6 +1323,11 @@ function nowSec() { return Math.floor(new Date().getTime() / 1000); }
 
 var CONT = [];
 var CONT_MAX = 30;
+/* Segundos a partir de los cuales un titulo cuenta como "empezado". Antes
+   eran 30, pero el progreso se guarda desde los 5: al encadenar episodios la
+   lista se quedaba vacia medio minuto, y quien mirase en ese hueco no veia
+   nada. */
+var CONT_MIN = 12;
 
 function loadCont() {
   try { CONT = JSON.parse(store("floptv_cont") || "[]") || []; } catch (e) { CONT = []; }
@@ -1349,17 +1359,39 @@ function touchCont() {
 /* Items sinteticos para la rejilla. Llevan _url para poder reproducirlos
    directamente, sin pasar por la ficha de la serie. */
 function contList(sec) {
-  var out = [], i;
+  var out = [], puestos = {}, i;
+
   for (i = 0; i < CONT.length; i++) {
     var c = CONT[i];
     if (c.sec !== sec) continue;
     var p = PROG[c.k];
-    if (!p || (p.d && p.t >= p.d * VISTO)) continue;
+    if (!p || p.t < CONT_MIN || (p.d && p.t >= p.d * VISTO)) continue;
+    puestos[c.k] = 1;
     out.push({
       name: c.n, stream_icon: c.img, cover: c.img,
       plot: "Continuar desde " + fmt(p.t) + (p.d ? " de " + fmt(p.d) : ""),
       _url: c.u, _key: c.k, _id: c.id
     });
+  }
+
+  /* Red de seguridad para peliculas: si hay progreso guardado pero se perdio
+     su entrada en la lista, se reconstruye cruzando con el catalogo. Con los
+     episodios no se puede, porque no estan en DATA.items. */
+  if (sec === SEC.VOD && DATA.loaded[SEC.VOD]) {
+    var all = DATA.items[SEC.VOD];
+    for (i = 0; i < all.length; i++) {
+      var k = "vod:" + all[i].stream_id;
+      if (puestos[k]) continue;
+      var q = PROG[k];
+      if (!q || q.t < CONT_MIN || (q.d && q.t >= q.d * VISTO)) continue;
+      puestos[k] = 1;
+      out.push({
+        name: all[i].name, stream_icon: all[i].stream_icon, cover: all[i].stream_icon,
+        plot: "Continuar desde " + fmt(q.t) + (q.d ? " de " + fmt(q.d) : ""),
+        _url: movieUrl(all[i].stream_id, all[i].container_extension),
+        _key: k, _id: all[i].stream_id
+      });
+    }
   }
   return out;
 }
@@ -1844,12 +1876,12 @@ function paintDetail() {
 
   var meta = [];
   if (it.year) meta.push(it.year);
-  if (it.rating && parseFloat(it.rating) > 0) meta.push("â˜… " + it.rating);
+  if (it.rating && parseFloat(it.rating) > 0) meta.push("\u2605 " + it.rating);
   if (it.genre) meta.push(cut(it.genre, 55));
   if (it.episode_run_time) meta.push(it.episode_run_time + " min");
   var p = progOf(UI.sec, it);
   if (p && p.t > 30 && !isSeen(UI.sec, it)) meta.push("visto hasta " + fmt(p.t));
-  $("d_meta").innerHTML = esc(meta.join("   Â·   "));
+  $("d_meta").innerHTML = esc(meta.join("   \u00b7   "));
   $("d_plot").innerHTML = esc(it.plot || "Sin sinopsis disponible.");
 }
 
@@ -1872,7 +1904,7 @@ function renderContent() {
 function buildCats(sec, raw) {
   var out = [];
   if (sec !== SEC.TV) out.push({ id: CONT_CAT, name: "CONTINUAR VIENDO" });
-  out.push({ id: FAV_CAT, name: "â˜…  FAVORITOS" });
+  out.push({ id: FAV_CAT, name: "\u2605  FAVORITOS" });
   out.push({ id: ALL_CAT, name: sec === SEC.TV ? "TODOS LOS CANALES" : "TODO" });
   for (var i = 0; i < raw.length; i++) {
     out.push({ id: String(raw[i].category_id), name: raw[i].category_name });
@@ -2085,8 +2117,8 @@ function openItem() {
   }
   if (UI.serie) {                       // ya dentro: es un episodio
     askResume(it, "ep:" + it.id, "ep" + it.id,
-              seriesUrl(it.id, it.ext), UI.serie.info.name + " Â· " + it.name,
-              { list: DATA.view, idx: UI.itemIdx, serieName: UI.serie.info.name + " Â· " });
+              seriesUrl(it.id, it.ext), UI.serie.info.name + " \u00b7 " + it.name,
+              { list: DATA.view, idx: UI.itemIdx, serieName: UI.serie.info.name + " \u00b7 " });
     return;
   }
   openSeries(it);
@@ -2160,7 +2192,7 @@ function paintTimeline() {
   var pct = Math.max(0, Math.min(1, v.currentTime / v.duration));
   $("tl_bar").style.width = Math.round(pct * 1600) + "px";
   $("tl_txt").innerHTML = fmt(v.currentTime) + "  /  " + fmt(v.duration) +
-                          "   Â·   izquierda y derecha saltan " + SEEK_STEP + " s";
+                          "   \u00b7   izquierda y derecha saltan " + SEEK_STEP + " s";
 }
 
 setInterval(function () {
@@ -2194,8 +2226,8 @@ function paintOsd() {
   } else if (UI.serie) { txt = UI.serie.info.name; }
   $("osd_cat").innerHTML = esc(txt);
   $("osd_state").innerHTML = PLAY.key
-    ? "AZUL: pistas y subtitulos  Â·  PLAY/PAUSA  Â·  flechas: saltar en el tiempo"
-    : "AZUL: pistas y subtitulos  Â·  flechas: cambiar de canal";
+    ? "AZUL: pistas y subtitulos  \u00b7  PLAY/PAUSA  \u00b7  flechas: saltar en el tiempo"
+    : "AZUL: pistas y subtitulos  \u00b7  flechas: cambiar de canal";
   paintTimeline();
 }
 
@@ -2245,7 +2277,7 @@ function doSearch() {
   var cats = DATA.cats[UI.sec];
   if (cats.length && cats[0].id === SEARCH_CAT) cats.shift();
   // Sin emoji: los caracteres fuera del plano basico salen como caja en esta TV.
-  cats.unshift({ id: SEARCH_CAT, name: 'Â»  "' + cut(q, 16) + '"  (' + res.length + ")" });
+  cats.unshift({ id: SEARCH_CAT, name: '\u00bb  "' + cut(q, 16) + '"  (' + res.length + ")" });
 
   UI.serie = null;
   UI.catIdx = 0; UI.catTop = 0;
