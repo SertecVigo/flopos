@@ -477,6 +477,9 @@ function startStream() {
   // Guardado periodico del punto de reproduccion (solo peliculas y episodios).
   if (PLAY.key) PLAY.saveTimer = setInterval(recordProgress, 10000);
 
+  TRACKS.info = null; TRACKS.diag = "";
+  applyDefaultSubs();
+
   PLAY.watchdog = setInterval(function () {
     // En pausa o al terminar, el tiempo no avanza y eso no es un fallo.
     if (v.paused || v.ended) { PLAY.stalls = 0; return; }
@@ -578,10 +581,12 @@ function togglePause() {
 
 var TRACKS = {
   audio: [], text: [],
-  aIdx: 0, tIdx: 0,       // seleccion actual
-  col: 0, row: 0,         // foco del menu
+  aIdx: 0, tIdx: -1,      // subtitulos apagados de partida
+  col: 0, row: 0,
   via: "",                // metodo detectado, se muestra en el menu
-  mediaId: null
+  mediaId: null,
+  info: null,             // sourceInfo del pipeline, si llega
+  diag: ""                // claves recibidas, para poder afinar sin estar delante
 };
 
 function luna(method, params, cb) {
@@ -595,6 +600,89 @@ function luna(method, params, cb) {
     b.call("luna://com.webos.media/" + method, JSON.stringify(params || {}));
     return true;
   } catch (e) { return false; }
+}
+
+/* El pipeline publica un sourceInfo con las pistas del fichero. La estructura
+   varia entre versiones de webOS, asi que en vez de dar por buena una ruta
+   concreta se recorre el objeto buscando listas de pistas: cualquier array
+   cuyos elementos tengan idioma o codec. La clave que las contiene dice si
+   son de audio o de subtitulos. */
+function harvestTracks(obj, keyName, out, depth) {
+  if (!obj || depth > 6) return;
+  var k, i;
+  if (Object.prototype.toString.call(obj) === "[object Array]") {
+    var pistas = [];
+    for (i = 0; i < obj.length; i++) {
+      var e = obj[i];
+      if (e && typeof e === "object" && (e.language || e.lang || e.codec || e.track_id !== undefined)) {
+        pistas.push({ i: i, name: prettyLang(e.language || e.lang || "") || (e.codec || ("Pista " + (i + 1))) });
+      }
+    }
+    var kn = String(keyName || "").toLowerCase();
+    if (pistas.length) {
+      if (kn.indexOf("audio") >= 0 && !out.audio.length) out.audio = pistas;
+      else if ((kn.indexOf("sub") >= 0 || kn.indexOf("text") >= 0) && !out.text.length) out.text = pistas;
+    }
+    for (i = 0; i < obj.length; i++) harvestTracks(obj[i], keyName, out, depth + 1);
+    return;
+  }
+  if (typeof obj === "object") {
+    for (k in obj) if (obj.hasOwnProperty(k)) harvestTracks(obj[k], k, out, depth + 1);
+  }
+}
+
+var LANGS = {
+  spa: "Espanol", es: "Espanol", esp: "Espanol", cas: "Espanol (castellano)",
+  eng: "Ingles", en: "Ingles",
+  fra: "Frances", fre: "Frances", fr: "Frances",
+  deu: "Aleman", ger: "Aleman", de: "Aleman",
+  ita: "Italiano", it: "Italiano",
+  por: "Portugues", pt: "Portugues",
+  ara: "Arabe", ar: "Arabe",
+  rus: "Ruso", ru: "Ruso",
+  jpn: "Japones", ja: "Japones",
+  chi: "Chino", zho: "Chino", zh: "Chino",
+  kor: "Coreano", ko: "Coreano",
+  cat: "Catalan", eus: "Euskera", glg: "Gallego",
+  nld: "Neerlandes", dut: "Neerlandes",
+  pol: "Polaco", tur: "Turco", swe: "Sueco", nor: "Noruego",
+  dan: "Danes", fin: "Finlandes", ell: "Griego", gre: "Griego",
+  heb: "Hebreo", hin: "Hindi", ron: "Rumano", rum: "Rumano",
+  hun: "Hungaro", ces: "Checo", cze: "Checo", ukr: "Ucraniano",
+  und: "Sin identificar"
+};
+
+function prettyLang(code) {
+  if (!code) return "";
+  var c = String(code).toLowerCase().replace(/[^a-z]/g, "");
+  if (LANGS[c]) return LANGS[c];
+  return code.length <= 3 ? code.toUpperCase() : code;
+}
+
+/* Suscripcion al pipeline: es la unica via para conocer los idiomas cuando el
+   elemento <video> no publica textTracks. Hay que conservar el bridge vivo o
+   la suscripcion se pierde. */
+var mediaBridge = null;
+
+function subscribeMedia(mid) {
+  if (!mid) return;
+  try {
+    mediaBridge = new PalmServiceBridge();
+    mediaBridge.onservicecallback = function (msg) {
+      var r = null;
+      try { r = JSON.parse(msg); } catch (e) { return; }
+      if (!r) return;
+      var si = r.sourceInfo || (r.info && r.info.sourceInfo) || null;
+      if (si) {
+        TRACKS.info = si;
+        var keys = [], k;
+        for (k in si) if (si.hasOwnProperty(k)) keys.push(k);
+        TRACKS.diag = keys.join(", ");
+      }
+    };
+    mediaBridge.call("luna://com.webos.media/subscribe",
+                     JSON.stringify({ mediaId: mid, subscribe: true }));
+  } catch (e) { mediaBridge = null; }
 }
 
 function mediaId() {
@@ -631,11 +719,26 @@ function detectTracks() {
     }
   } catch (e3) {}
 
-  // 2. Sin API estandar: indices a ciegas por el servicio de webOS. No sabemos
-  //    cuantas pistas hay, asi que se ofrecen varias y se prueba.
+  // 2. sourceInfo del pipeline: da los idiomas reales cuando el <video> no
+  //    publica las pistas. Es la via que funciona en la mayoria de modelos.
+  if ((!TRACKS.audio.length || !TRACKS.text.length) && TRACKS.info) {
+    var found = { audio: [], text: [] };
+    harvestTracks(TRACKS.info, "", found, 0);
+    if (!TRACKS.audio.length && found.audio.length) {
+      TRACKS.audio = found.audio;
+      TRACKS.via += (TRACKS.via ? " + " : "") + "sourceInfo";
+    }
+    if (!TRACKS.text.length && found.text.length) {
+      TRACKS.text = found.text;
+      if (TRACKS.via.indexOf("sourceInfo") < 0) TRACKS.via += (TRACKS.via ? " + " : "") + "sourceInfo";
+    }
+  }
+
+  // 3. Ultimo recurso: indices a ciegas. No sabemos cuantas pistas hay ni de
+  //    que idioma, asi que se ofrecen varias y se prueba.
   if (!TRACKS.audio.length) {
     for (i = 0; i < 6; i++) TRACKS.audio.push({ i: i, name: "Pista " + (i + 1) });
-    TRACKS.via = TRACKS.mediaId ? "webOS selectTrack" : "no disponible";
+    TRACKS.via = TRACKS.mediaId ? "indices a ciegas" : "no disponible";
   }
   if (!TRACKS.text.length) {
     for (i = 0; i < 6; i++) TRACKS.text.push({ i: i, name: "Subtitulo " + (i + 1) });
@@ -669,6 +772,7 @@ function applyText(idx) {
     } catch (e) {}
     if (TRACKS.mediaId) ok = luna("setSubtitleEnable", { mediaId: TRACKS.mediaId, enable: false });
     TRACKS.tIdx = idx;
+    store("floptv_subs", "off");                   // se recuerda para la proxima
     setStatus("Subtitulos desactivados");
     setTimeout(function () { setStatus(""); }, 2500);
     return;
@@ -685,8 +789,35 @@ function applyText(idx) {
     if (!ok) ok = luna("selectTrack", { mediaId: TRACKS.mediaId, type: "text", index: idx });
   }
   TRACKS.tIdx = idx;
-  setStatus(ok ? "Subtitulos: pista " + (idx + 1) : "Esta TV no deja cambiar los subtitulos");
+  store("floptv_subs", "on");
+  var nom = TRACKS.text[idx + 1] ? TRACKS.text[idx + 1].name : ("pista " + (idx + 1));
+  setStatus(ok ? "Subtitulos: " + nom : "Esta TV no deja cambiar los subtitulos");
   setTimeout(function () { setStatus(""); }, 2500);
+}
+
+/* Los subtitulos arrancan apagados salvo que el usuario los dejara puestos.
+   Se aplica en cuanto hay pipeline: antes del primer fotograma no hay mediaId.
+   Se reintenta un par de veces porque el pipeline tarda en publicarlo. */
+function applyDefaultSubs() {
+  var intentos = 0;
+  function probar() {
+    intentos++;
+    var mid = mediaId();
+    if (mid) {
+      TRACKS.mediaId = mid;
+      subscribeMedia(mid);                       // para conocer los idiomas
+      var quiere = store("floptv_subs") === "on";
+      luna("setSubtitleEnable", { mediaId: mid, enable: quiere });
+      TRACKS.tIdx = quiere ? 0 : -1;
+      return;
+    }
+    if (intentos < 6) setTimeout(probar, 1200);
+  }
+  var v = $("video");
+  try {
+    if (v.textTracks) for (var i = 0; i < v.textTracks.length; i++) v.textTracks[i].mode = "disabled";
+  } catch (e) {}
+  probar();
 }
 
 function openTracks() {
@@ -720,13 +851,13 @@ function renderTracks() {
     }
     box.innerHTML = h;
   }
+  var ciegas = TRACKS.via.indexOf("ciegas") >= 0 || !TRACKS.via;
   $("tr_info").innerHTML =
     "Metodo: " + esc(TRACKS.via || "ninguno") +
     (TRACKS.mediaId ? "" : "  (sin mediaId)") +
+    (TRACKS.diag ? "  ·  pipeline: " + esc(cut(TRACKS.diag, 90)) : "") +
     "<br>Izquierda y derecha cambian de columna &middot; OK aplica &middot; ATRAS cierra." +
-    (TRACKS.via.indexOf("audioTracks") < 0
-      ? "<br>Esta TV no publica los nombres de las pistas: prueba por numero hasta dar con la buena."
-      : "");
+    (ciegas ? "<br>Esta TV no publica el idioma de las pistas: prueba por numero hasta dar con la buena." : "");
 }
 
 /* =====================================================================
