@@ -176,6 +176,22 @@
   #tl .tb i { display: block; height: 10px; background: #7c5cff; border-radius: 5px; }
   #tl .tt { margin-top: 8px; font-size: 22px; color: #9aa2d0; }
 
+  /* ---------- PIN ---------- */
+  #pin { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+         background: rgba(5,7,15,0.94); display: none; }
+  #pin.on { display: block; }
+  .pw { position: absolute; left: 560px; top: 340px; width: 800px; padding: 44px 48px;
+        background: rgba(9,12,26,0.98); border: 3px solid #2a3161; border-radius: 18px;
+        text-align: center; }
+  .pw .pt { font-size: 32px; font-weight: 700; }
+  .pw .ps { margin-top: 12px; font-size: 21px; color: #9aa2d0; line-height: 1.5; }
+  .pw .pd { margin-top: 34px; }
+  .pw .pd b { display: inline-block; width: 62px; height: 78px; line-height: 78px;
+              margin: 0 10px; font-size: 40px; background: #141a38;
+              border: 3px solid #2a3161; border-radius: 12px; }
+  .pw .pd b.lleno { border-color: #7c5cff; background: #232a5e; }
+  .pw .pe { margin-top: 24px; font-size: 20px; color: #ff8f8f; min-height: 26px; }
+
   /* ---------- dialogo de reanudar ---------- */
   #resume { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
             background: rgba(5,7,15,0.90); display: none; }
@@ -286,6 +302,15 @@
       </div>
     </div>
     <div class="tf" id="tr_info">&nbsp;</div>
+  </div>
+</div>
+
+<div id="pin">
+  <div class="pw">
+    <div class="pt" id="pin_t">Contenido para adultos</div>
+    <div class="ps" id="pin_s">Introduce el PIN con los numeros del mando.</div>
+    <div class="pd" id="pin_d"></div>
+    <div class="pe" id="pin_e">&nbsp;</div>
   </div>
 </div>
 
@@ -1427,6 +1452,114 @@ function toggleFav() {
 }
 
 /* =====================================================================
+   6b. Bloqueo del contenido para adultos
+
+   El PIN por si solo no sirve de nada: si los canales siguen apareciendo en
+   "TODO" y en el buscador, basta con no entrar por su categoria. Por eso el
+   filtro se aplica al catalogo entero mientras no se haya desbloqueado.
+
+   No es seguridad de verdad (el PIN vive en localStorage y esto es una app
+   homebrew): es un freno para que no salga por accidente con el mando.
+   ===================================================================== */
+
+var ADULTO_RE = /adult|xxx|porn|erotic|\+\s*18|18\+/i;
+var desbloqueado = false;        // dura lo que dure la sesion
+
+function catEsAdulta(nombre) { return ADULTO_RE.test(String(nombre || "")); }
+
+/* Ids de categoria protegidas de la seccion actual. */
+function idsAdultos(sec) {
+  var out = {}, cats = DATA.cats[sec];
+  for (var i = 0; i < cats.length; i++) {
+    if (cats[i].id.indexOf("__") !== 0 && catEsAdulta(cats[i].name)) out[cats[i].id] = 1;
+  }
+  return out;
+}
+
+function quitaAdultos(lista, sec) {
+  if (desbloqueado) return lista;
+  var malos = idsAdultos(sec);
+  var hay = false, k;
+  for (k in malos) if (malos.hasOwnProperty(k)) { hay = true; break; }
+  if (!hay) return lista;
+  return lista.filter(function (it) { return !malos[String(it.category_id)]; });
+}
+
+var PIN = { modo: "", buf: "", primera: "", tras: null };
+
+function pinGuardado() { return store("floptv_pin") || ""; }
+
+function pintaPin() {
+  var h = "";
+  for (var i = 0; i < 4; i++) {
+    h += '<b class="' + (i < PIN.buf.length ? "lleno" : "") + '">' +
+         (i < PIN.buf.length ? "&bull;" : "&nbsp;") + "</b>";
+  }
+  $("pin_d").innerHTML = h;
+}
+
+function abrePin(tras) {
+  PIN.tras = tras;
+  PIN.buf = ""; PIN.primera = "";
+  PIN.modo = pinGuardado() ? "pedir" : "crear1";
+  $("pin_t").innerHTML = PIN.modo === "pedir" ? "Contenido para adultos" : "Crea un PIN";
+  $("pin_s").innerHTML = PIN.modo === "pedir"
+    ? "Introduce el PIN con los numeros del mando. ATRAS para salir."
+    : "Elige cuatro numeros para proteger este contenido. ATRAS para salir.";
+  $("pin_e").innerHTML = "&nbsp;";
+  pintaPin();
+  $("pin").className = "on";
+  UI.screen = "pin";
+}
+
+function cierraPin(ok) {
+  $("pin").className = "";
+  var tras = PIN.tras;
+  PIN.tras = null;
+  UI.screen = "browse";
+  if (ok && tras) tras();
+  else { show("browse"); renderSecs(); renderCats(); renderContent(); }
+}
+
+function pinTecla(k) {
+  if (k === KEY.BACK) { cierraPin(false); return; }
+
+  if (k >= 48 && k <= 57) {                      // numeros del mando
+    if (PIN.buf.length < 4) PIN.buf += String(k - 48);
+    pintaPin();
+    if (PIN.buf.length < 4) return;
+
+    if (PIN.modo === "crear1") {
+      PIN.primera = PIN.buf; PIN.buf = "";
+      PIN.modo = "crear2";
+      $("pin_s").innerHTML = "Repitelo para confirmar.";
+      pintaPin();
+      return;
+    }
+    if (PIN.modo === "crear2") {
+      if (PIN.buf === PIN.primera) {
+        store("floptv_pin", PIN.buf);
+        desbloqueado = true;
+        cierraPin(true);
+      } else {
+        PIN.buf = ""; PIN.primera = ""; PIN.modo = "crear1";
+        $("pin_s").innerHTML = "Elige cuatro numeros para proteger este contenido.";
+        $("pin_e").innerHTML = "No coinciden. Prueba otra vez.";
+        pintaPin();
+      }
+      return;
+    }
+    // Comprobar
+    if (PIN.buf === pinGuardado()) { desbloqueado = true; cierraPin(true); }
+    else {
+      PIN.buf = "";
+      $("pin_e").innerHTML = "PIN incorrecto.";
+      pintaPin();
+    }
+  }
+}
+
+/* =====================================================================
    7. Listas virtualizadas
    ===================================================================== */
 
@@ -1682,6 +1815,27 @@ function buildCats(sec, raw) {
   DATA.cats[sec] = out;
 }
 
+/* Categoria protegida y aun sin desbloquear. */
+function catBloqueada(idx) {
+  var c = DATA.cats[UI.sec][idx];
+  return !UI.serie && c && !desbloqueado &&
+         c.id.indexOf("__") !== 0 && catEsAdulta(c.name);
+}
+
+/* El PIN se pide al ENTRAR, no al enfocar: si saltara con solo pasar el foco
+   por encima, seria imposible recorrer la lista de categorias. */
+function intentaEntrar() {
+  if (!catBloqueada(UI.catIdx)) return true;
+  var destino = UI.catIdx;
+  abrePin(function () {
+    UI.screen = "browse";
+    selectCategory(destino);
+    UI.col = 2;
+    renderSecs(); renderCats(); renderContent();
+  });
+  return false;
+}
+
 function selectCategory(idx) {
   UI.catIdx = idx;
 
@@ -1703,11 +1857,14 @@ function selectCategory(idx) {
   if (cat.id === CONT_CAT) {
     DATA.view = contList(UI.sec);
   } else if (cat.id === FAV_CAT) {
-    DATA.view = all.filter(function (c) { return DATA.favs[favKey(UI.sec, c)]; });
+    // Los favoritos tambien se filtran: si no, bastaria con marcarlos antes.
+    DATA.view = quitaAdultos(all.filter(function (c) { return DATA.favs[favKey(UI.sec, c)]; }), UI.sec);
   } else if (cat.id === SEARCH_CAT) {
-    DATA.view = searchIn(all, UI.search);
+    DATA.view = quitaAdultos(searchIn(all, UI.search), UI.sec);
   } else if (cat.id === ALL_CAT) {
-    DATA.view = all;
+    DATA.view = quitaAdultos(all, UI.sec);
+  } else if (catBloqueada(idx)) {
+    DATA.view = [];            // enfocarla no muestra nada hasta meter el PIN
   } else {
     DATA.view = all.filter(function (c) { return String(c.category_id) === cat.id; });
   }
@@ -2029,6 +2186,7 @@ function doSearch() {
   UI.catIdx = 0; UI.catTop = 0;
   UI.col = 2;
   $("search").className = "";
+  UI.screen = "browse";
   show("browse");
   renderSecs();
   selectCategory(0);
@@ -2103,6 +2261,7 @@ document.addEventListener("keydown", function (e) {
   }
 
   if (UI.screen === "setup")  { setupKey(k); e.preventDefault(); return; }
+  if (UI.screen === "pin")    { pinTecla(k); e.preventDefault(); return; }
   if (UI.screen === "splash") return;
 
   if (UI.screen === "search") {
@@ -2145,13 +2304,14 @@ document.addEventListener("keydown", function (e) {
     }
     if (k === KEY.RIGHT) {
       if (UI.sec !== SEC.TV && UI.col === 2 && (UI.itemIdx + 1) % GCOLS !== 0 && UI.itemIdx + 1 < DATA.view.length) moveFocus(1);
+      else if (UI.col === 1) { if (intentaEntrar()) { UI.col = 2; renderSecs(); renderCats(); renderContent(); previewDebounced(); } }
       else if (UI.col < 2) { UI.col++; renderSecs(); renderCats(); renderContent(); previewDebounced(); }
       e.preventDefault(); return;
     }
 
     if (k === KEY.OK) {
       if (UI.col === 0) switchSection(UI.secIdx);
-      else if (UI.col === 1) { UI.col = 2; renderCats(); renderContent(); previewDebounced(); }
+      else if (UI.col === 1) { if (intentaEntrar()) { UI.col = 2; renderCats(); renderContent(); previewDebounced(); } }
       else openItem();
       e.preventDefault(); return;
     }
