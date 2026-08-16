@@ -29,13 +29,23 @@
 -->
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* El collage de gatas va en el body: una sola imagen ya compuesta a 1920x1080
+     (disenio/make_fondo.py). Doce <img> en el DOM no los mueve esta tele, y a
+     tamano exacto el navegador no reescala nada al pintar. */
   html, body {
     width: 100%; height: 100%; overflow: hidden;
-    background: #05070f; color: #e8ebff;
+    background-color: #05070f; color: #e8ebff;
+    background-image: url(fondo.jpg);
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 1920px 1080px;
     font-family: "LG Smart UI", "Segoe UI", Arial, sans-serif;
   }
 
-  #video { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; background: #000; }
+  /* Sin fondo negro: mientras no haya imagen que pintar se ve el collage
+     detras. En cuanto entra el primer fotograma el video lo tapa igual. */
+  #video { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px;
+           background: transparent; }
 
   .screen { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; display: none; }
   .screen.on { display: block; }
@@ -62,16 +72,26 @@
   @keyframes funde { from { opacity: 0; } to { opacity: 1; } }
 
   /* ---------- configuracion y arranque ---------- */
-  /* Degradado estatico: da profundidad sin coste, porque no se anima. */
+  /* El collage se hereda del body; aqui va solo el velo. Todo estatico: no se
+     anima nada, asi que no cuesta un fotograma.
+     El velo es imprescindible: sobre las fotos a pelo el texto no se lee. Cae
+     de 0.88 a la izquierda (donde estan los campos) a 0.30 a la derecha, que es
+     donde se ven las gatas. */
   #setup, #splash {
     padding: 70px 90px;
-    background: #05070f;
-    background: -webkit-radial-gradient(30% 20%, circle, #1b2352 0%, #090c1c 62%, #05070f 100%);
-    background: radial-gradient(circle at 30% 20%, #1b2352 0%, #090c1c 62%, #05070f 100%);
+    background: rgba(5,7,15,0.74);
+    background: -webkit-linear-gradient(left, rgba(5,7,15,0.88) 0%,
+                rgba(9,12,26,0.72) 42%, rgba(12,10,34,0.30) 100%);
+    background: linear-gradient(to right, rgba(5,7,15,0.88) 0%,
+                rgba(9,12,26,0.72) 42%, rgba(12,10,34,0.30) 100%);
+    /* Sombra heredada por todo el texto de estas dos pantallas: con el velo
+       fino, los textos secundarios caen sobre fotos claras y sin esto no se
+       leen. Es estatico, no cuesta nada. */
+    text-shadow: 0 2px 8px rgba(0,0,0,0.95), 0 0 2px rgba(0,0,0,0.9);
   }
   .brand { font-size: 62px; font-weight: 800; letter-spacing: -1px; }
   .brand span { color: #7c5cff; }
-  .tag { font-size: 24px; color: #7a83b4; margin-top: 8px; }
+  .tag { font-size: 24px; color: #a3abd6; margin-top: 8px; }
   .field { margin-top: 26px; }
   .label { font-size: 21px; color: #7a83b4; margin-bottom: 8px; }
   .box {
@@ -90,7 +110,7 @@
   .focus { border-color: #7c5cff; background: #232a5e; transform: translate3d(0, -2px, 0); }
   .btn.focus { background: #7c5cff; border-color: #a893ff; }
   .msg { margin-top: 24px; font-size: 21px; color: #ff8f8f; min-height: 28px; }
-  .hint { margin-top: 20px; font-size: 20px; color: #5f679a; line-height: 1.6; }
+  .hint { margin-top: 20px; font-size: 20px; color: #939bc8; line-height: 1.6; }
   #splash .state { margin-top: 40px; font-size: 26px; color: #9aa2d0; }
   .bar { margin-top: 18px; width: 620px; height: 8px; background: #1a2145; border-radius: 4px; }
   .bar i { display: block; height: 8px; width: 0; background: #7c5cff; border-radius: 4px;
@@ -98,21 +118,21 @@
   .head { transition: color 150ms ease-out; }
 
   /* ---------- navegador ---------- */
-  #browse { background: rgba(5,7,15,0.55);
+  #browse { background: rgba(5,7,15,0.40);
             -webkit-animation: funde 180ms ease-out; animation: funde 180ms ease-out; }
 
   /* Las tres columnas entran escalonadas: da sensacion de fluidez y solo son
      tres elementos animandose, no cientos. */
   #secs { position: absolute; top: 0; left: 0; width: 250px; height: 1080px;
-          background: rgba(6,8,18,0.95); border-right: 2px solid #1d2450;
+          background: rgba(6,8,18,0.82); border-right: 2px solid #1d2450;
           -webkit-animation: entra 220ms ease-out both; animation: entra 220ms ease-out both; }
   #cats { position: absolute; top: 0; left: 250px; width: 380px; height: 1080px;
-          background: rgba(9,12,26,0.90); border-right: 2px solid #1d2450;
+          background: rgba(9,12,26,0.80); border-right: 2px solid #1d2450;
           -webkit-animation: entra 220ms ease-out 60ms both; animation: entra 220ms ease-out 60ms both; }
   #cont { position: absolute; top: 0; left: 630px; width: 1290px; height: 1080px;
-          background: rgba(7,9,20,0.72);
+          background: rgba(7,9,20,0.66);
           -webkit-animation: entra 240ms ease-out 110ms both; animation: entra 240ms ease-out 110ms both; }
-  #browse.tv #cont { width: 700px; background: rgba(7,9,20,0.80); border-right: 2px solid #1d2450; }
+  #browse.tv #cont { width: 700px; background: rgba(7,9,20,0.74); border-right: 2px solid #1d2450; }
 
   .head { height: 84px; line-height: 84px; padding: 0 26px;
           font-size: 21px; letter-spacing: 2px; color: #7c5cff; font-weight: 700;
@@ -486,6 +506,9 @@ function show(id) {
   for (var i = 0; i < s.length; i++) s[i].className = "screen";
   if (id) $(id).className = "screen on" + (id === "browse" ? " " + secClass() : "");
   UI.screen = id || "player";
+  // La leyenda dice a que devuelve ATRAS, y eso cambia con lo que se este
+  // viendo: se repinta cada vez que se entra al menu.
+  if (id === "browse") paintKeys();
 }
 
 function setStatus(text) {
@@ -535,7 +558,7 @@ function apiGet(qs, cb) {
    ===================================================================== */
 
 var PLAY = {
-  id: null, url: null, tries: 0,
+  id: null, url: null, tries: 0, esperandoOk: false, forzar: false,
   backoff: [2000, 5000, 15000, 30000],
   timer: null, watchdog: null, lastTime: -1, stalls: 0,
   key: null,          // clave de progreso (null en directo)
@@ -553,8 +576,110 @@ function stopWatchdog() {
 
 /* Al salir de TV se corta del todo: libera la unica conexion de la cuenta
    para que la pelicula pueda abrirse. */
+/* =====================================================================
+   Latido: quien esta usando la unica conexion de la cuenta
+
+   El proveedor no da ninguna senal aprovechable: active_cons no cuenta la
+   segunda conexion y tarda 6-9 minutos en soltarse. Asi que cada aparato
+   publica un latido en Firestore mientras reproduce y lo consulta antes de
+   arrancar. Sin autenticacion a proposito: esta TV es Chrome 38 y no puede
+   con el SDK de Firebase. El documento solo lleva nombre de dispositivo y
+   marca de tiempo, nunca las credenciales del servicio.
+   ===================================================================== */
+
+var LATIDO = {
+  doc: "https://firestore.googleapis.com/v1/projects/flopotv-latido-2/databases/(default)/documents/latido/estado",
+  key: "AIzaSyAgcEAF690flRG0O6cDGs720jOptcJV8tw",
+  yo: "Tele",
+  frescura: 60,
+  cada: 20000,
+  timer: null
+};
+
+function latidoEscribe(titulo, ts, cb) {
+  var listo = false;
+  function fin(ok) { if (!listo) { listo = true; if (cb) cb(ok); } }
+  try {
+    var x = new XMLHttpRequest();
+    x.open("PATCH", LATIDO.doc + "?key=" + LATIDO.key, true);
+    x.setRequestHeader("Content-Type", "application/json");
+    x.timeout = 8000;
+    x.onload = function () { fin(x.status >= 200 && x.status < 300); };
+    x.onerror = function () { fin(false); };
+    x.ontimeout = function () { fin(false); };
+    x.send(JSON.stringify({ fields: {
+      dispositivo: { stringValue: LATIDO.yo },
+      titulo: { stringValue: String(titulo || "").substring(0, 120) },
+      ts: { integerValue: String(ts) }
+    } }));
+  } catch (e) { fin(false); }
+}
+
+/* Pide el turno. cb(res) con:
+     {ok:true}                 -> se puede reproducir, y queda reclamado
+     {ok:false, quien, que}    -> lo tiene el otro aparato
+     {ok:false, fallo:true}    -> no se ha podido comprobar
+
+   🚨 Falla CERRADO: si no se puede comprobar, NO se reproduce. Dos aparatos a
+   la vez pueden costar el baneo de la cuenta.
+
+   Tres pasos y no uno: leer, reclamar y RELEER. La relectura resuelve el
+   empate de los dos aparatos pidiendo turno a la vez. */
+function latidoPide(titulo, cb) {
+  function leer(despues) {
+    var x = new XMLHttpRequest();
+    var listo = false;
+    function fin(v) { if (!listo) { listo = true; despues(v); } }
+    try {
+      x.open("GET", LATIDO.doc + "?key=" + LATIDO.key, true);
+      x.timeout = 6000;
+      x.onload = function () {
+        var f;
+        try { f = JSON.parse(x.responseText).fields || {}; } catch (e) { return fin(null); }
+        fin({
+          quien: (f.dispositivo && f.dispositivo.stringValue) || "",
+          que: (f.titulo && f.titulo.stringValue) || "",
+          ts: parseInt((f.ts && f.ts.integerValue) || "0", 10)
+        });
+      };
+      x.onerror = function () { fin(null); };
+      x.ontimeout = function () { fin(null); };
+      x.send();
+    } catch (e) { fin(null); }
+  }
+
+  leer(function (a) {
+    if (!a) return cb({ ok: false, fallo: true });
+    if (a.quien && a.quien !== LATIDO.yo && (nowSec() - a.ts) <= LATIDO.frescura) {
+      return cb({ ok: false, quien: a.quien, que: a.que });
+    }
+    latidoEscribe(titulo, nowSec(), function (ok) {
+      if (!ok) return cb({ ok: false, fallo: true });
+      leer(function (b) {
+        if (!b) return cb({ ok: false, fallo: true });
+        if (b.quien !== LATIDO.yo) return cb({ ok: false, quien: b.quien, que: b.que });
+        cb({ ok: true });
+      });
+    });
+  });
+}
+
+/* El turno ya se reclamo en latidoPide; aqui solo se renueva. */
+function latidoArranca(titulo) {
+  if (LATIDO.timer) clearInterval(LATIDO.timer);
+  LATIDO.timer = setInterval(function () { latidoEscribe(titulo, nowSec()); }, LATIDO.cada);
+}
+
+/* Al parar se publica ts=0: el otro lo ve caducado al instante en vez de
+   esperar a que pase la ventana de frescura. */
+function latidoPara() {
+  if (LATIDO.timer) { clearInterval(LATIDO.timer); LATIDO.timer = null; }
+  latidoEscribe("", 0);
+}
+
 function stopPlayback() {
   recordProgress();                 // guardar antes de soltar el medio
+  latidoPara();
   stopWatchdog();
   var v = $("video");
   try { v.pause(); } catch (e) {}
@@ -567,6 +692,7 @@ function stopPlayback() {
 function playUrl(id, url, name, key, resumeTo) {
   id = String(id);
   if (id === String(PLAY.id) && !PLAY.tries) { UI.playingName = name || UI.playingName; return; }
+  ULT = null;                       // lo que arranca ahora sustituye a lo anterior
   recordProgress();                 // guardar lo que se estaba viendo antes
   PLAY.id = id; PLAY.url = url; PLAY.tries = 0;
   PLAY.key = key || null;
@@ -581,9 +707,62 @@ function playChannel(id, name) {
   playUrl(id, liveUrl(id), name, null, 0);
 }
 
+/* =====================================================================
+   Volver a lo que se estaba viendo
+   ---------------------------------------------------------------------
+   ATRAS sale del video al menu, pero cambiar de seccion PARA la
+   reproduccion (una sola conexion). Sin guardar el contexto, ATRAS
+   devolvia a una pantalla vacia -- ni video ni menu -- y parecia que la app
+   se habia ido. Se guarda lo justo para relanzarlo por donde iba.
+   ===================================================================== */
+var ULT = null;
+
+function guardaUltimo() {
+  if (!PLAY.id || !PLAY.url) { ULT = null; return; }
+  var t = 0;
+  try { t = $("video").currentTime || 0; } catch (e) {}
+  ULT = { directo: !PLAY.key, key: PLAY.key, id: PLAY.id, url: PLAY.url,
+          name: UI.playingName, ep: PLAY.ep, meta: PLAY.meta, t: t > 30 ? t : 0 };
+}
+
+function reanudaUltimo() {
+  var u = ULT;
+  ULT = null;
+  if (!u) return;
+  if (u.directo) { show(null); playChannel(u.id, u.name); flashOsd(); return; }
+  startItem(u.key, u.id, u.url, u.name, u.t, u.ep, u.meta);
+}
+
+/* Nombre de lo que ATRAS va a recuperar, o null si no hay nada. */
+function nombreVuelta() {
+  if (PLAY.id) return UI.playingName || "el video";
+  if (ULT) return ULT.name || "lo anterior";
+  return null;
+}
+
 /* \u00f0\u0178\u0161\u00a8 src directo en el <video>, SIN <source type>: con type, Chrome 38
    descarta la fuente si no reconoce el mime, y ninguna pelicula .mkv abria. */
 function startStream() {
+  setStatus("Comprobando el otro aparato...");
+  latidoPide(UI.playingName, function (res) {
+    if (res.ok) return startStreamYa();
+    stopWatchdog();
+    if (res.fallo) {
+      setStatus("No se ha podido comprobar si hay otro aparato reproduciendo. " +
+                "Por seguridad no se reproduce: dos a la vez pueden costar el baneo " +
+                "de la cuenta. OK para volver a comprobar, ATRAS para salir.");
+    } else {
+      setStatus("Se esta usando en " + (res.quien || "otro aparato") +
+                (res.que ? " (" + cut(res.que, 40) + ")" : "") +
+                ". La cuenta solo admite un aparato a la vez: cierra la reproduccion " +
+                "alli y pulsa OK para volver a comprobar.");
+    }
+    PLAY.esperandoOk = true;   // OK = volver a comprobar, NUNCA forzar
+  });
+}
+
+function startStreamYa() {
+  PLAY.esperandoOk = false;
   var v = $("video");
   stopWatchdog();
   while (v.firstChild) v.removeChild(v.firstChild);
@@ -593,6 +772,9 @@ function startStream() {
   setStatus(PLAY.tries ? "Reconectando (" + PLAY.tries + ")..." : "Cargando...");
 
   try { v.load(); v.play(); } catch (e) { scheduleRetry("no se pudo iniciar"); return; }
+
+  // A partir de aqui esta app es la duena de la unica conexion: se anuncia.
+  latidoArranca(UI.playingName);
 
   // Guardado periodico del punto de reproduccion (solo peliculas y episodios).
   if (PLAY.key) PLAY.saveTimer = setInterval(recordProgress, 10000);
@@ -616,14 +798,28 @@ function startStream() {
 
 /* Espera creciente: reintentar rapido puede hacer que el proveedor bloquee
    la cuenta, que ademas solo admite una conexion. */
+/* 🚨 Un solo reintento automatico, y para.
+
+   Antes reintentaba hasta 4 veces con espera creciente. Con un solo dispositivo
+   eso estaba bien, pero desde que existe la app de movil es un tiro en el pie:
+   la cuenta admite UNA conexion y el segundo stream mata al primero (medido
+   2026-08-03). Si el movil coge la conexion, la tele se queda sin imagen,
+   reintenta sola y se la roba de vuelta; el movil hara lo mismo, y los dos se
+   quedan pelandose sin que se vea nada en ninguno.
+
+   Un reintento cubre el corte tonto de red. A partir de ahi decide el usuario,
+   que es el unico que sabe si esta viendo la tele o el movil. */
 function scheduleRetry(motivo) {
   stopWatchdog();
-  if (PLAY.tries >= PLAY.backoff.length) {
-    setStatus("No se pudo reproducir. Pulsa ATRAS y prueba otro.");
+  if (PLAY.tries >= 1) {
+    setStatus("No se pudo reproducir. Puede que se este usando en otro " +
+              "dispositivo (el servicio solo admite uno a la vez). " +
+              "Pulsa OK para reintentar o ATRAS para salir.");
+    PLAY.esperandoOk = true;
     return;
   }
-  var espera = PLAY.backoff[PLAY.tries];
   PLAY.tries++;
+  var espera = PLAY.backoff[0];
   setStatus(motivo + ". Reintento en " + Math.round(espera / 1000) + " s...");
   PLAY.timer = setTimeout(startStream, espera);
 }
@@ -660,16 +856,75 @@ function scheduleRetry(motivo) {
 /* Siguiente episodio de la temporada. La lista se guarda al arrancar el
    episodio y no se lee de DATA.view: el usuario puede haber cambiado de
    temporada o de seccion mientras se reproducia. */
+/* Primera temporada POSTERIOR a la actual que tenga episodios, o null si esta
+   era la ultima. Se salta las vacias. */
+function siguienteTemporada(ep) {
+  if (!ep.keys || !ep.byKey || ep.temp === undefined) return null;
+  var i, actual = -1;
+  for (i = 0; i < ep.keys.length; i++) if (ep.keys[i].id === ep.temp) { actual = i; break; }
+  if (actual < 0) return null;
+  for (i = actual + 1; i < ep.keys.length; i++) {
+    var l = ep.byKey[ep.keys[i].id];
+    if (l && l.length) return { id: ep.keys[i].id, list: l };
+  }
+  return null;
+}
+
 function playNextEpisode() {
-  if (!PLAY.ep || !PLAY.ep.list) return;
-  var next = PLAY.ep.idx + 1;
-  if (next >= PLAY.ep.list.length) {
-    setStatus("Fin de la temporada");
-    setTimeout(function () { setStatus(""); }, 4000);
+  if (!PLAY.ep) return;
+
+  /* Reanudado desde "continuar viendo": ahi no hay lista de episodios en
+     memoria (no se guarda en localStorage por tamano), solo la serie, la
+     temporada y el indice. Se vuelve a pedir la serie ANTES de decidir el
+     siguiente. Es una llamada a la API, no un stream: no toca la unica
+     conexion, y ademas la reproduccion ya ha terminado. */
+  if (!PLAY.ep.list && PLAY.ep.sid !== undefined && PLAY.ep.sid !== null) {
+    var ep = PLAY.ep;
+    setStatus("Buscando el siguiente...");
+    apiGet("action=get_series_info&series_id=" + encodeURIComponent(ep.sid), function (err, info) {
+      if (err || !info || !info.episodes) {
+        setStatus("No se pudo cargar la serie para seguir");
+        setTimeout(function () { setStatus(""); }, 4000);
+        return;
+      }
+      var t = temporadasDe(info, { cover: PLAY.meta && PLAY.meta.img });
+      ep.keys = t.keys; ep.byKey = t.byKey;
+      ep.list = t.byKey[ep.temp] || [];
+      if (!ep.list.length) {
+        setStatus("Fin de la serie");
+        setTimeout(function () { setStatus(""); }, 4000);
+        return;
+      }
+      siguienteEpisodioYa();
+    });
     return;
   }
-  var e = PLAY.ep.list[next];
-  var ctx = { list: PLAY.ep.list, idx: next, serieName: PLAY.ep.serieName };
+  if (!PLAY.ep.list) return;
+  siguienteEpisodioYa();
+}
+
+function siguienteEpisodioYa() {
+  var next = PLAY.ep.idx + 1;
+  var lista = PLAY.ep.list, temp = PLAY.ep.temp;
+
+  if (next >= lista.length) {
+    // Fin de temporada: sigue con el primero de la siguiente, que es lo que uno
+    // espera viendo una serie del tiron.
+    var sig = siguienteTemporada(PLAY.ep);
+    if (!sig) {
+      setStatus("Fin de la serie");
+      setTimeout(function () { setStatus(""); }, 4000);
+      return;
+    }
+    lista = sig.list; next = 0; temp = sig.id;
+  }
+
+  var e = lista[next];
+  // sid viaja con el contexto: sin el, el capitulo encadenado quedaria en
+  // "continuar viendo" sin forma de seguir la cadena al reanudarlo.
+  var ctx = { list: lista, idx: next, serieName: PLAY.ep.serieName,
+              keys: PLAY.ep.keys, byKey: PLAY.ep.byKey, temp: temp,
+              sid: PLAY.ep.sid };
   var meta = PLAY.meta;
   var url = seriesUrl(e.id, e.ext);
   setStatus("Siguiente: " + cut(e.name, 40));
@@ -680,7 +935,9 @@ function playNextEpisode() {
     playUrl("ep" + e.id, url, (ctx.serieName || "") + e.name, "ep:" + e.id, 0);
     PLAY.ep = ctx;               // despues de playUrl: el arranque no debe perderlo
     if (meta) PLAY.meta = { n: (ctx.serieName || "") + e.name, u: url, id: "ep" + e.id,
-                            sec: SEC.SERIES, img: e.stream_icon || meta.img };
+                            sec: SEC.SERIES, img: e.stream_icon || meta.img,
+                            sid: ctx.sid, temp: ctx.temp, eidx: ctx.idx,
+                            sname: ctx.serieName };
     flashOsd();
   });
 }
@@ -1349,10 +1606,15 @@ function touchCont() {
   // Terminado: fuera de la lista, ya no hay nada que continuar.
   if (p && p.d && p.t >= p.d * VISTO) { saveCont(); return; }
 
-  CONT.unshift({
+  var e = {
     k: PLAY.key, n: PLAY.meta.n, u: PLAY.meta.u,
     img: PLAY.meta.img, sec: PLAY.meta.sec, id: PLAY.meta.id, ts: nowSec()
-  });
+  };
+  // Solo para episodios: lo justo para reconstruir el encadenado al reanudar.
+  if (PLAY.meta.sid !== undefined) {
+    e.sid = PLAY.meta.sid; e.temp = PLAY.meta.temp; e.eidx = PLAY.meta.eidx; e.sname = PLAY.meta.sname;
+  }
+  CONT.unshift(e);
   saveCont();
 }
 
@@ -1370,7 +1632,10 @@ function contList(sec) {
     out.push({
       name: c.n, stream_icon: c.img, cover: c.img,
       plot: "Continuar desde " + fmt(p.t) + (p.d ? " de " + fmt(p.d) : ""),
-      _url: c.u, _key: c.k, _id: c.id
+      _url: c.u, _key: c.k, _id: c.id,
+      _ep: (c.sid !== undefined
+              ? { sid: c.sid, temp: c.temp, idx: c.eidx, sname: c.sname }
+              : null)
     });
   }
 
@@ -2011,7 +2276,9 @@ function ensureSection(sec, cb) {
 }
 
 function switchSection(sec) {
-  if (sec !== SEC.TV) stopPlayback();     // no dejar un canal sonando de fondo
+  // No dejar un canal sonando de fondo, pero sin perder por donde iba: ATRAS
+  // lo recupera desde el mismo punto.
+  if (sec !== SEC.TV) { guardaUltimo(); stopPlayback(); }
 
   ensureSection(sec, function (err) {
     if (err) { show("browse"); setStatus("No se pudo cargar: " + err); return; }
@@ -2037,41 +2304,49 @@ function switchSection(sec) {
    10. Series: temporadas y episodios
    ===================================================================== */
 
+/* Arma {keys, byKey} a partir de la respuesta de get_series_info. Se usa al
+   abrir la serie y tambien al rehidratarla desde "continuar viendo". */
+function temporadasDe(info, serie) {
+  serie = serie || {};
+  var byKey = {}, keys = [], k, j, orden = [];
+  for (k in info.episodes) if (info.episodes.hasOwnProperty(k)) orden.push(k);
+  orden.sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
+
+  for (var t = 0; t < orden.length; t++) {
+    k = orden[t];
+    var arr = info.episodes[k], eps = [];
+    for (j = 0; j < arr.length; j++) {
+      var e = arr[j];
+      // Muchos titulos ya vienen como "Serie - S01E06 - Rya": anteponer
+      // "E6" ademas queda redundante, asi que solo se pone si falta.
+      var tit = trim(e.title || "");
+      var yaNumerado = /s\d{1,2}\s*e\d{1,3}/i.test(tit) || /^e\d{1,3}\b/i.test(tit);
+      eps.push({
+        id: e.id,
+        ext: e.container_extension,
+        name: yaNumerado ? tit : ("E" + (e.episode_num || (j + 1)) + "  " + tit),
+        plot: (e.info && e.info.plot) || serie.plot,
+        stream_icon: (e.info && e.info.movie_image) || serie.cover,
+        year: serie.year
+      });
+    }
+    if (!eps.length) continue;
+    byKey[k] = eps;
+    keys.push({ id: k, name: "Temporada " + k + "  (" + eps.length + ")" });
+  }
+  return { keys: keys, byKey: byKey };
+}
+
 function openSeries(serie) {
   setStatus("Cargando episodios...");
   apiGet("action=get_series_info&series_id=" + encodeURIComponent(serie.series_id), function (err, info) {
     setStatus("");
     if (err || !info || !info.episodes) { setStatus("No se pudieron cargar los episodios"); return; }
 
-    var byKey = {}, keys = [], k, j, orden = [];
-    for (k in info.episodes) if (info.episodes.hasOwnProperty(k)) orden.push(k);
-    orden.sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
+    var t = temporadasDe(info, serie);
+    if (!t.keys.length) { setStatus("Esta serie no tiene episodios"); return; }
 
-    for (var s = 0; s < orden.length; s++) {
-      k = orden[s];
-      var arr = info.episodes[k], eps = [];
-      for (j = 0; j < arr.length; j++) {
-        var e = arr[j];
-        // Muchos titulos ya vienen como "Serie - S01E06 - Rya": anteponer
-        // "E6" ademas queda redundante, asi que solo se pone si falta.
-        var tit = trim(e.title || "");
-        var yaNumerado = /s\d{1,2}\s*e\d{1,3}/i.test(tit) || /^e\d{1,3}\b/i.test(tit);
-        eps.push({
-          id: e.id,
-          ext: e.container_extension,
-          name: yaNumerado ? tit : ("E" + (e.episode_num || (j + 1)) + "  " + tit),
-          plot: (e.info && e.info.plot) || serie.plot,
-          stream_icon: (e.info && e.info.movie_image) || serie.cover,
-          year: serie.year
-        });
-      }
-      if (!eps.length) continue;
-      byKey[k] = eps;
-      keys.push({ id: k, name: "Temporada " + k + "  (" + eps.length + ")" });
-    }
-    if (!keys.length) { setStatus("Esta serie no tiene episodios"); return; }
-
-    UI.serie = { info: serie, keys: keys, byKey: byKey };
+    UI.serie = { info: serie, keys: t.keys, byKey: t.byKey };
     UI.catIdx = 0; UI.catTop = 0;
     UI.col = 2;
     selectCategory(0);
@@ -2108,7 +2383,14 @@ function openItem() {
   if (UI.sec === SEC.TV) { playChannel(it.stream_id, it.name); show(null); flashOsd(); return; }
 
   // Item de "continuar viendo": ya trae su URL, no hay que buscarlo.
-  if (it._url) { askResume(it, it._key, it._id, it._url, it.name, null); return; }
+  if (it._url) {
+    // Con _ep se puede seguir encadenando; la lista se rehidrata al acabar.
+    var ctx = it._ep ? { list: null, idx: it._ep.idx, serieName: it._ep.sname,
+                         keys: null, byKey: null, temp: it._ep.temp, sid: it._ep.sid }
+                     : null;
+    askResume(it, it._key, it._id, it._url, it.name, ctx);
+    return;
+  }
 
   if (UI.sec === SEC.VOD) {
     askResume(it, "vod:" + it.stream_id, it.stream_id,
@@ -2118,7 +2400,14 @@ function openItem() {
   if (UI.serie) {                       // ya dentro: es un episodio
     askResume(it, "ep:" + it.id, "ep" + it.id,
               seriesUrl(it.id, it.ext), UI.serie.info.name + " \u00b7 " + it.name,
-              { list: DATA.view, idx: UI.itemIdx, serieName: UI.serie.info.name + " \u00b7 " });
+              /* Se guardan tambien las temporadas y cual es la actual: al acabar
+                 una hay que saltar a la siguiente, y UI.serie ya no sirve porque
+                 el usuario puede haberse ido a otra seccion mientras ve el
+                 capitulo. */
+              { list: DATA.view, idx: UI.itemIdx, serieName: UI.serie.info.name + " \u00b7 ",
+                sid: UI.serie.info.series_id,
+                keys: UI.serie.keys, byKey: UI.serie.byKey,
+                temp: (UI.serie.keys[UI.catIdx] || {}).id });
     return;
   }
   openSeries(it);
@@ -2147,6 +2436,15 @@ function askResume(it, key, id, url, name, ep) {
     n: name, u: url, id: id, sec: UI.sec,
     img: it.stream_icon || it.cover || (UI.serie ? UI.serie.info.cover : "")
   };
+  /* Si es un episodio, se apunta de que serie, temporada e indice viene. Con
+     eso, al reanudarlo desde "continuar viendo" se puede seguir encadenando:
+     la lista de episodios NO se guarda (serian decenas de KB por serie en
+     localStorage), se vuelve a pedir al proveedor cuando hace falta. */
+  if (ep && ep.sid !== undefined) {
+    meta.sid = ep.sid; meta.temp = ep.temp; meta.eidx = ep.idx; meta.sname = ep.serieName;
+  } else if (it && it._ep) {
+    meta.sid = it._ep.sid; meta.temp = it._ep.temp; meta.eidx = it._ep.idx; meta.sname = it._ep.sname;
+  }
   var p = PROG[key];
   var terminada = p && p.d && p.t >= p.d * VISTO;
   if (!p || p.t < 30 || terminada) { startItem(key, id, url, name, 0, ep, meta); return; }
@@ -2329,16 +2627,21 @@ function moveVertical(dir) {
 
 function paintKeys() {
   var k = $("keys");
+  // Lo primero, y con nombre: la pregunta "?como vuelvo a lo que estaba
+  // viendo?" se contesta aqui, no obligando a probar botones.
+  var vuelta = nombreVuelta();
+  var atras = vuelta ? "<u>ATRAS</u> vuelve a &laquo;" + esc(cut(vuelta, 34)) + "&raquo;"
+                     : "<u>ATRAS</u> volver";
   if (UI.sec === SEC.TV) {
     k.innerHTML =
-      "<u>OK</u> pantalla completa &middot; <u>ATRAS</u> volver al video<br>" +
+      "<u>OK</u> pantalla completa &middot; " + atras + "<br>" +
       "<u>AMARILLO</u> favorito &middot; <u>AZUL</u> recargar &middot; <u>ROJO</u> salir<br>" +
       "El canal enfocado se previsualiza tras un momento quieto.";
   } else {
     k.innerHTML =
       "<u>OK</u> " + (UI.sec === SEC.SERIES ? "abrir serie / ver episodio" : "ver pelicula") +
       " &middot; <u>VERDE</u> buscar &middot; <u>AMARILLO</u> favorito<br>" +
-      "<u>ATRAS</u> volver &middot; <u>AZUL</u> recargar &middot; <u>ROJO</u> salir";
+      atras + " &middot; <u>AZUL</u> recargar &middot; <u>ROJO</u> salir";
   }
 }
 
@@ -2415,7 +2718,11 @@ document.addEventListener("keydown", function (e) {
 
     if (k === KEY.BACK) {
       if (UI.serie) closeSeries();
-      else { show(null); flashOsd(); }
+      else if (PLAY.id) { show(null); flashOsd(); }
+      else if (ULT) reanudaUltimo();
+      // Nunca dejar la pantalla vacia: sin nada que recuperar parecia que la
+      // app se habia cerrado y se acababa saliendo de verdad.
+      else setStatus("No hay nada en reproduccion. ROJO para salir de FlopoTV.");
       e.preventDefault(); return;
     }
     if (k === KEY.GREEN)  { openSearch(); e.preventDefault(); return; }
@@ -2426,6 +2733,14 @@ document.addEventListener("keydown", function (e) {
   }
 
   /* --- video a pantalla completa --- */
+  // Tras agotar el unico reintento automatico, OK vuelve a intentarlo en vez de
+  // salir: decide el usuario quien se queda la unica conexion de la cuenta.
+  if (PLAY.esperandoOk && k === KEY.OK) {
+    PLAY.esperandoOk = false; PLAY.tries = 0;
+    setStatus("Reintentando...");
+    startStream();
+    e.preventDefault(); return;
+  }
   if (k === KEY.BLUE || k === KEY.GREEN) { openTracks(); e.preventDefault(); return; }
   if (k === KEY.PLAY || k === KEY.PAUSE || k === KEY.PLAYPAUSE) { togglePause(); e.preventDefault(); return; }
   if (k === KEY.OK || k === KEY.DOWN || k === KEY.BACK) {
