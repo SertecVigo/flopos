@@ -565,12 +565,14 @@ var PLAY = {
   resumeTo: 0,        // segundos a los que saltar cuando haya metadatos
   seekTo: null,       // destino de un salto en curso (null = no hay salto)
   seekDesde: 0,       // ticks del watchdog que lleva el salto sin completarse
+  seekTimer: null,    // agrupa pulsaciones seguidas en una sola peticion
   saveTimer: null,
   ep: null,           // { list, idx } de la temporada, para encadenar episodios
   meta: null          // { n, u, img, sec, id } para la lista de continuar viendo
 };
 
 function stopWatchdog() {
+  if (PLAY.seekTimer) { clearTimeout(PLAY.seekTimer); PLAY.seekTimer = null; }
   if (PLAY.watchdog) { clearInterval(PLAY.watchdog); PLAY.watchdog = null; }
   if (PLAY.timer) { clearTimeout(PLAY.timer); PLAY.timer = null; }
   if (PLAY.saveTimer) { clearInterval(PLAY.saveTimer); PLAY.saveTimer = null; }
@@ -772,7 +774,7 @@ function startStreamYa() {
   while (v.firstChild) v.removeChild(v.firstChild);
   v.setAttribute("src", PLAY.url);
 
-  PLAY.lastTime = -1; PLAY.stalls = 0; PLAY.seekTo = null; PLAY.seekDesde = 0;
+  PLAY.lastTime = -1; limpiaSeek();
   if (PLAY.resumeTo > 0) setStatus("Cargando desde " + fmt(PLAY.resumeTo) + "...");
   else setStatus(PLAY.tries ? "Reconectando (" + PLAY.tries + ")..." : "Cargando...");
 
@@ -797,8 +799,14 @@ function startStreamYa() {
        -> recarga desde el segundo 0. Era exactamente lo que se veia al pulsar la
        flecha: "cargando" unos 12 s y la pelicula empezando de nuevo. */
     if (PLAY.seekTo !== null) {
+      if (PLAY.seekTimer) return;         // aun agrupando pulsaciones, no ha salido peticion
       PLAY.seekDesde++;
-      if (PLAY.seekDesde >= 5) {          // ~10 s: el pipeline no sale del salto
+      /* 20 s, no 10: medido contra este proveedor el 2026-08-19, el primer byte
+         de una peticion con Range tarda 5,6-6,7 s SIEMPRE, sea el principio del
+         fichero o el minuto 90. Sumado a lo que tarda el pipeline en rellenar,
+         un salto legitimo se come 10 s con facilidad y cortarlo antes cambia una
+         espera por una recarga entera, que cuesta esos 6 s otra vez. */
+      if (PLAY.seekDesde >= 10) {
         var destino = PLAY.seekTo;
         limpiaSeek();
         recargaEn(destino);               // camino probado: recargar y saltar al tener metadatos
@@ -817,7 +825,10 @@ function startStreamYa() {
   }, 2000);
 }
 
-function limpiaSeek() { PLAY.seekTo = null; PLAY.seekDesde = 0; PLAY.stalls = 0; }
+function limpiaSeek() {
+  if (PLAY.seekTimer) { clearTimeout(PLAY.seekTimer); PLAY.seekTimer = null; }
+  PLAY.seekTo = null; PLAY.seekDesde = 0; PLAY.stalls = 0;
+}
 
 /* Recarga el medio y salta al punto pedido. El salto "en frio" (asignar
    currentTime en loadedmetadata) es el que usa "continuar viendo" y esta
@@ -2581,17 +2592,26 @@ function seekBy(delta) {
   var v = $("video");
   if (!PLAY.key || !isFinite(v.duration) || v.duration <= 0) return false;
 
-  /* Los saltos se ACUMULAN: pulsar cuatro veces la derecha son 120 s desde
-     donde se estaba, no cuatro saltos de 30 s pedidos al pipeline a la vez.
-     Con un salto en curso, currentTime ya vale el destino, pero si el pipeline
-     va lento el mando se adelanta y se perdian pulsaciones. */
+  /* Los saltos se ACUMULAN y salen en UNA sola peticion.
+     Medido contra este proveedor: cada peticion con Range tarda 5,6-6,7 s en
+     dar el primer byte. Avanzar 3 minutos son 6 pulsaciones; pedirle al
+     pipeline 6 saltos encadenados es medio minuto de espera y seis veces la
+     ocasion de atascarse. Se acumula el destino, se pinta al instante, y la
+     peticion real sale cuando el mando lleva 800 ms parado. */
   var base = (PLAY.seekTo !== null) ? PLAY.seekTo : v.currentTime;
   var t = base + delta;
   if (t < 0) t = 0;
   if (t > v.duration - 5) t = v.duration - 5;
 
   PLAY.seekTo = t; PLAY.seekDesde = 0; PLAY.stalls = 0;
-  try { v.currentTime = t; } catch (e) { limpiaSeek(); return false; }
+  if (PLAY.seekTimer) clearTimeout(PLAY.seekTimer);
+  PLAY.seekTimer = setTimeout(function () {
+    PLAY.seekTimer = null;
+    if (PLAY.seekTo === null) return;
+    PLAY.seekDesde = 0;
+    try { v.currentTime = PLAY.seekTo; } catch (e) { limpiaSeek(); }
+  }, 800);
+
   setStatus("Saltando a " + fmt(t) + "...");
   flashOsd();
   paintTimeline();
