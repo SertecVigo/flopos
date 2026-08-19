@@ -563,6 +563,8 @@ var PLAY = {
   timer: null, watchdog: null, lastTime: -1, stalls: 0,
   key: null,          // clave de progreso (null en directo)
   resumeTo: 0,        // segundos a los que saltar cuando haya metadatos
+  seekTo: null,       // destino de un salto en curso (null = no hay salto)
+  seekDesde: 0,       // ticks del watchdog que lleva el salto sin completarse
   saveTimer: null,
   ep: null,           // { list, idx } de la temporada, para encadenar episodios
   meta: null          // { n, u, img, sec, id } para la lista de continuar viendo
@@ -686,6 +688,7 @@ function stopPlayback() {
   try { v.pause(); } catch (e) {}
   try { v.removeAttribute("src"); v.load(); } catch (e2) {}
   PLAY.id = null; PLAY.url = null; PLAY.tries = 0; PLAY.key = null; PLAY.resumeTo = 0;
+  limpiaSeek();
   UI.playingId = null;
   setStatus("");
 }
@@ -769,8 +772,9 @@ function startStreamYa() {
   while (v.firstChild) v.removeChild(v.firstChild);
   v.setAttribute("src", PLAY.url);
 
-  PLAY.lastTime = -1; PLAY.stalls = 0;
-  setStatus(PLAY.tries ? "Reconectando (" + PLAY.tries + ")..." : "Cargando...");
+  PLAY.lastTime = -1; PLAY.stalls = 0; PLAY.seekTo = null; PLAY.seekDesde = 0;
+  if (PLAY.resumeTo > 0) setStatus("Cargando desde " + fmt(PLAY.resumeTo) + "...");
+  else setStatus(PLAY.tries ? "Reconectando (" + PLAY.tries + ")..." : "Cargando...");
 
   try { v.load(); v.play(); } catch (e) { scheduleRetry("no se pudo iniciar"); return; }
 
@@ -786,6 +790,22 @@ function startStreamYa() {
   PLAY.watchdog = setInterval(function () {
     // En pausa o al terminar, el tiempo no avanza y eso no es un fallo.
     if (v.paused || v.ended) { PLAY.stalls = 0; return; }
+
+    /* 🚨 Un salto en curso NO es un stream caido. Durante el seek el pipeline
+       vuelve a pedir el fichero con Range y currentTime se queda clavado en el
+       destino: para el watchdog viejo eso eran 6 ticks sin avanzar -> reintento
+       -> recarga desde el segundo 0. Era exactamente lo que se veia al pulsar la
+       flecha: "cargando" unos 12 s y la pelicula empezando de nuevo. */
+    if (PLAY.seekTo !== null) {
+      PLAY.seekDesde++;
+      if (PLAY.seekDesde >= 5) {          // ~10 s: el pipeline no sale del salto
+        var destino = PLAY.seekTo;
+        limpiaSeek();
+        recargaEn(destino);               // camino probado: recargar y saltar al tener metadatos
+      }
+      return;
+    }
+
     var t = v.currentTime;
     if (t > 0 && t !== PLAY.lastTime) {
       PLAY.lastTime = t; PLAY.stalls = 0; PLAY.tries = 0;
@@ -795,6 +815,20 @@ function startStreamYa() {
     PLAY.stalls++;
     if (PLAY.stalls >= 6) scheduleRetry("sin imagen");
   }, 2000);
+}
+
+function limpiaSeek() { PLAY.seekTo = null; PLAY.seekDesde = 0; PLAY.stalls = 0; }
+
+/* Recarga el medio y salta al punto pedido. El salto "en frio" (asignar
+   currentTime en loadedmetadata) es el que usa "continuar viendo" y esta
+   probado contra este proveedor; el salto "en caliente" a veces deja el
+   pipeline colgado. NO gasta el reintento de scheduleRetry: no es un fallo del
+   stream, y el turno del latido ya es nuestro. */
+function recargaEn(t) {
+  if (!PLAY.key || !PLAY.url) return;
+  PLAY.resumeTo = t > 0 ? t : 0;
+  setStatus("Saltando a " + fmt(t) + "...");
+  startStreamYa();
 }
 
 /* Espera creciente: reintentar rapido puede hacer que el proveedor bloquee
@@ -812,6 +846,21 @@ function startStreamYa() {
    que es el unico que sabe si esta viendo la tele o el movil. */
 function scheduleRetry(motivo) {
   stopWatchdog();
+
+  /* 🚨 Un reintento en mitad de una pelicula NO puede devolverla al principio.
+     Antes se recargaba el src con resumeTo a 0, asi que un corte de red a la
+     hora y media de peli obligaba a buscar el punto a mano. Se conserva el
+     destino del salto si lo habia, y si no, por donde iba. En directo no
+     aplica: alli el punto lo manda el servidor. */
+  if (PLAY.key) {
+    var punto = PLAY.seekTo;
+    if (punto === null) {
+      try { punto = $("video").currentTime || 0; } catch (e) { punto = 0; }
+    }
+    if (punto > 5) PLAY.resumeTo = punto;
+  }
+  limpiaSeek();
+
   if (PLAY.tries >= 1) {
     setStatus("No se pudo reproducir. Puede que se este usando en otro " +
               "dispositivo (el servicio solo admite uno a la vez). " +
@@ -833,13 +882,37 @@ function scheduleRetry(motivo) {
   }, true);
   v.addEventListener("playing", function () { setStatus(""); }, false);
 
+  /* El pipeline avisa de que ha terminado el salto. A partir de ahi el
+     watchdog vuelve a vigilar de forma normal. */
+  v.addEventListener("seeked", function () {
+    if (PLAY.seekTo === null) return;
+    limpiaSeek();
+    PLAY.lastTime = -1;
+    setStatus("");
+    paintTimeline();
+  }, false);
+
   // El salto solo es posible cuando ya hay metadatos; antes, currentTime se ignora.
   v.addEventListener("loadedmetadata", function () {
     if (PLAY.resumeTo > 0) {
       var to = PLAY.resumeTo;
       PLAY.resumeTo = 0;
       try { v.currentTime = to; setStatus("Reanudando en " + fmt(to)); } catch (e) {}
-      setTimeout(function () { setStatus(""); }, 2500);
+
+      /* Comprobar que el salto ha cuajado de verdad. Si el servidor deja de
+         responder 206 Partial Content, el pipeline se traga el currentTime sin
+         rechistar y arranca desde el principio: sin este aviso parece un fallo
+         de la app y no se sabe que mirar. */
+      setTimeout(function () {
+        if (String(PLAY.id) === "" || !PLAY.key) { setStatus(""); return; }
+        var ahora = 0;
+        try { ahora = v.currentTime || 0; } catch (e2) {}
+        if (to > 30 && ahora < to / 2) {
+          setStatus("El servidor ha empezado la reproduccion desde el principio: " +
+                    "ahora mismo no admite saltar dentro de este titulo.");
+          setTimeout(function () { setStatus(""); }, 8000);
+        } else { setStatus(""); }
+      }, 6000);
     }
   }, false);
 
@@ -2488,9 +2561,11 @@ function paintTimeline() {
   var v = $("video"), tl = $("tl");
   if (!PLAY.key || !isFinite(v.duration) || v.duration <= 0) { tl.className = ""; return; }
   tl.className = "on";
-  var pct = Math.max(0, Math.min(1, v.currentTime / v.duration));
+  // Con un salto en curso manda el destino: la barra debe ir donde se pidio.
+  var ahora = (PLAY.seekTo !== null) ? PLAY.seekTo : v.currentTime;
+  var pct = Math.max(0, Math.min(1, ahora / v.duration));
   $("tl_bar").style.width = Math.round(pct * 1600) + "px";
-  $("tl_txt").innerHTML = fmt(v.currentTime) + "  /  " + fmt(v.duration) +
+  $("tl_txt").innerHTML = fmt(ahora) + "  /  " + fmt(v.duration) +
                           "   \u00b7   izquierda y derecha saltan " + SEEK_STEP + " s";
 }
 
@@ -2505,10 +2580,19 @@ var SEEK_STEP = 30;
 function seekBy(delta) {
   var v = $("video");
   if (!PLAY.key || !isFinite(v.duration) || v.duration <= 0) return false;
-  var t = v.currentTime + delta;
+
+  /* Los saltos se ACUMULAN: pulsar cuatro veces la derecha son 120 s desde
+     donde se estaba, no cuatro saltos de 30 s pedidos al pipeline a la vez.
+     Con un salto en curso, currentTime ya vale el destino, pero si el pipeline
+     va lento el mando se adelanta y se perdian pulsaciones. */
+  var base = (PLAY.seekTo !== null) ? PLAY.seekTo : v.currentTime;
+  var t = base + delta;
   if (t < 0) t = 0;
   if (t > v.duration - 5) t = v.duration - 5;
-  try { v.currentTime = t; } catch (e) { return false; }
+
+  PLAY.seekTo = t; PLAY.seekDesde = 0; PLAY.stalls = 0;
+  try { v.currentTime = t; } catch (e) { limpiaSeek(); return false; }
+  setStatus("Saltando a " + fmt(t) + "...");
   flashOsd();
   paintTimeline();
   return true;
