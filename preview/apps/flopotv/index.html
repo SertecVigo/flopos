@@ -593,8 +593,7 @@ function stopWatchdog() {
 
 var LATIDO = {
   doc: "https://firestore.googleapis.com/v1/projects/flopotv-latido-2/databases/(default)/documents/latido/estado",
-  key: "",   /* el banco de pruebas va SIN la clave del latido: aqui no se
-                    reproduce nada y publicarla en HTML plano la deja indexada */
+  key: "",
   yo: "Tele",
   frescura: 60,
   cada: 20000,
@@ -2864,9 +2863,22 @@ document.addEventListener("keydown", function (e) {
    14. Configuracion
    ===================================================================== */
 
+/* Servidor predefinido. No es una credencial (usuario y contrasena nunca van
+   en el codigo: este IPK se publica en un repo publico). */
+var HOST_DEF = "aplicasmart.space:9955";
+
 var setupItems = ["f_host", "f_user", "f_pass", "b_go", "b_clear"];
 var setupIdx = 0;
 var typing = false;
+
+/* Abre la pantalla de datos garantizando que el servidor nunca quede vacio:
+   "Borrar", una conexion fallida o un localStorage borrado lo dejaban en
+   blanco y habia que teclearlo con el mando. */
+function openSetup() {
+  if (!bareHost($("f_host").value)) $("f_host").value = CFG.host || HOST_DEF;
+  show("setup");
+  paintSetupFocus();
+}
 
 function paintSetupFocus() {
   for (var i = 0; i < setupItems.length; i++) {
@@ -2884,7 +2896,8 @@ function setupKey(k) {
   if (k === KEY.OK) {
     var id = setupItems[setupIdx];
     if (id === "b_go") return doLogin();
-    if (id === "b_clear") { $("f_host").value = ""; $("f_user").value = ""; $("f_pass").value = ""; return; }
+    // Borrar limpia las credenciales; el servidor vuelve al predefinido.
+    if (id === "b_clear") { $("f_host").value = HOST_DEF; $("f_user").value = ""; $("f_pass").value = ""; return; }
     typing = true;
     $(id).focus();
   }
@@ -2906,11 +2919,11 @@ function exitApp() {
 }
 
 function doLogin() {
-  CFG.host = bareHost($("f_host").value);
+  CFG.host = bareHost($("f_host").value) || HOST_DEF;
   CFG.user = trim($("f_user").value);
   CFG.pass = trim($("f_pass").value);
-  if (!CFG.host || !CFG.user || !CFG.pass) {
-    $("setup_msg").innerHTML = "Rellena servidor, usuario y contrasena.";
+  if (!CFG.user || !CFG.pass) {
+    $("setup_msg").innerHTML = "Rellena usuario y contrasena.";
     return;
   }
   $("setup_msg").innerHTML = "";
@@ -2939,7 +2952,7 @@ function boot() {
   ensureSection(SEC.TV, function (err) {
     if (err) {
       splash("No se pudo cargar", 100, err + "   Revisa los datos.");
-      setTimeout(function () { show("setup"); paintSetupFocus(); }, 4000);
+      setTimeout(openSetup, 4000);
       return;
     }
     UI.sec = SEC.TV; UI.secIdx = SEC.TV;
@@ -2968,21 +2981,18 @@ function boot() {
   buildRows("chans_list", ROWS);
   buildGrid();
 
-  // El host se precarga (no es una credencial). Usuario y contrasena nunca
-  // van en el codigo: este IPK se publica en un repo publico.
-  CFG.host = store("floptv_host") || "aplicasmart.space:9955";
+  CFG.host = store("floptv_host") || HOST_DEF;
   CFG.user = store("floptv_user") || "";
   CFG.pass = store("floptv_pass") || "";
 
-  if (CFG.host && CFG.user && CFG.pass) {
+  if (CFG.user && CFG.pass) {
     boot();
   } else {
     $("f_host").value = CFG.host;
     $("f_user").value = CFG.user;
     $("f_pass").value = CFG.pass;
-    setupIdx = CFG.host ? 1 : 0;
-    show("setup");
-    paintSetupFocus();
+    setupIdx = 1;   // el servidor ya esta puesto: el foco arranca en Usuario
+    openSetup();
   }
 })();
 </script>
