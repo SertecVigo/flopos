@@ -2366,10 +2366,8 @@ function switchSection(sec) {
 
   ensureSection(sec, function (err) {
     if (err) { show("browse"); setStatus("No se pudo cargar: " + err); return; }
-    if (sec === SEC.TV && !PLAY.id) {
-      var last = store("floptv_last");
-      if (last) playChannel(last, "");
-    }
+    // Volver a TV no relanza el ultimo canal guardado: lo que se estaba
+    // viendo en esta sesion lo recupera ATRAS (ULT); lo de otro dia, nunca.
     UI.sec = sec; UI.secIdx = sec;
     UI.serie = null; UI.search = null;
     UI.catTop = 0; UI.itemIdx = 0; UI.itemTop = 0;
@@ -2944,10 +2942,12 @@ function boot() {
   loadProg();
   loadCont();
 
-  // El video arranca ANTES que el catalogo y en paralelo: el pipeline de
-  // webOS tarda ~7,7 s la primera vez y asi se solapa con la descarga.
+  // NUNCA se reproduce nada solo al abrir la app. Antes arrancaba el ultimo
+  // canal visto para calentar el pipeline, pero eso saltaba el PIN: quien
+  // encendiera la tele al dia siguiente se encontraba lo ultimo que se vio,
+  // fuera lo que fuera. El ultimo canal solo sirve para dejar el cursor
+  // encima; reproducirlo es una decision de quien tiene el mando.
   var last = store("floptv_last");
-  if (last) { UI.playingId = String(last); playChannel(last, ""); }
 
   ensureSection(SEC.TV, function (err) {
     if (err) {
@@ -2962,11 +2962,12 @@ function boot() {
     renderSecs();
     selectCategory(1);
 
-    if (UI.playingId) {
+    // Cursor sobre el ultimo canal (si esta a la vista: los de adultos van
+    // filtrados mientras no se meta el PIN, y entonces no se encuentra).
+    if (last) {
       for (var i = 0; i < DATA.view.length; i++) {
-        if (String(DATA.view[i].stream_id) === String(UI.playingId)) {
+        if (String(DATA.view[i].stream_id) === String(last)) {
           UI.itemIdx = i;
-          UI.playingName = DATA.view[i].name;
           break;
         }
       }
