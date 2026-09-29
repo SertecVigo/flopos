@@ -681,8 +681,278 @@ function latidoPara() {
   latidoEscribe("", 0);
 }
 
+/* =====================================================================
+   Sincronizacion con el movil
+
+   Favoritos, progreso y "continuar viendo" vivian solo en el localStorage de
+   cada aparato: lo que se marcaba aqui no existia en el movil ni al reves.
+   Se fusionan a traves de un documento en el mismo Firestore del latido.
+
+   🚨 Aqui NO viaja la URL del stream. Las del proveedor llevan el usuario y
+   la contrasena incrustados (.../movie/USUARIO/CLAVE/id.mkv) y este documento
+   va sin autenticacion. Se sincronizan la clave y la extension del fichero, y
+   cada aparato reconstruye la URL con SUS credenciales.
+
+   Fusion por clave, NO por conjunto. Sustituir el conjunto entero seria el
+   clasico "lost update": el ultimo en escribir se cargaria lo que el otro
+   anadio sin haberlo leido. Cada entrada lleva su marca de tiempo y gana la
+   mas reciente.
+
+   Borrar deja LAPIDA (b:1) en vez de quitar la entrada. Si se borrase a
+   secas, el movil devolveria el favorito en la siguiente vuelta desde su
+   propia copia, y desmarcar no serviria de nada.
+
+   Falla ABIERTO, justo al reves que el latido: si no se puede sincronizar no
+   pasa nada, favoritos y progreso siguen funcionando en local. En el latido
+   fallar abierto arriesga el baneo de la cuenta; aqui no arriesga nada.
+   ===================================================================== */
+
+var SYNC = {
+  doc: "https://firestore.googleapis.com/v1/projects/flopotv-latido-2/databases/(default)/documents/sync/estado",
+  espera: 3000,            // reposo antes de subir: marcar 5 estrellas = 1 escritura
+  lapida: 60 * 86400,      // las lapidas se podan a los 60 dias
+  timer: null,
+  yendo: false,            // hay una sincronizacion en vuelo
+  otraVez: false,          // llego otra peticion mientras iba esa
+  repintando: false        // el repintado no debe volver a pedir sincronizacion
+};
+
+/* La extension sale de la URL guardada, no de un campo nuevo: asi las
+   entradas que ya existian se pueden publicar sin migrar nada. */
+function extDe(url) {
+  var m = /\.([a-z0-9]{2,5})(?:\?|$)/i.exec(String(url || ""));
+  return m ? m[1].toLowerCase() : "";
+}
+
+function secDeNombre(s) {
+  if (typeof s === "number") return s;
+  var i = SEC_PREFIX.indexOf(String(s));
+  return i < 0 ? SEC.VOD : i;
+}
+
+/* Reconstruye la URL con las credenciales DE ESTE aparato. */
+function urlDeClave(k, ext) {
+  var p = String(k).split(":"), t = p[0], id = p[1];
+  if (t === "ep" || t === "ser") return seriesUrl(id, ext || "mp4");
+  if (t === "vod") return movieUrl(id, ext || "mp4");
+  if (t === "tv") return liveUrl(id);
+  return "";
+}
+
+/* El identificador de reproduccion que espera askResume. */
+function idDeClave(k) {
+  var p = String(k).split(":");
+  return p[0] === "ep" ? "ep" + p[1] : p[1];
+}
+
+/* "Continuar viendo" es una lista aqui y un mapa arriba: la lista tiene
+   orden, pero fusionar necesita clave. El orden se recupera por marca de
+   tiempo al volver. */
+function contMapa() {
+  var m = {}, i, c, e;
+  for (i = 0; i < CONT.length; i++) {
+    c = CONT[i];
+    if (!c || !c.k) continue;
+    e = { ts: c.ts || 0, sec: SEC_PREFIX[c.sec] || String(c.sec),
+          n: c.n || "", img: c.img || "", ext: extDe(c.u) };
+    if (c.sid !== undefined) { e.sid = c.sid; e.temp = c.temp; e.eidx = c.eidx; e.sname = c.sname; }
+    m[c.k] = e;
+  }
+  return m;
+}
+
+function contDesdeMapa(m) {
+  var out = [], k, v, e;
+  for (k in m) {
+    if (!m.hasOwnProperty(k)) continue;
+    v = m[k] || {};
+    if (v.b) continue;
+    e = { k: k, n: v.n || "", img: v.img || "", ts: v.ts || 0,
+          sec: secDeNombre(v.sec), u: urlDeClave(k, v.ext), id: idDeClave(k) };
+    if (v.sid !== undefined) { e.sid = v.sid; e.temp = v.temp; e.eidx = v.eidx; e.sname = v.sname; }
+    out.push(e);
+  }
+  out.sort(function (a, b) { return (b.ts || 0) - (a.ts || 0); });
+  return out.slice(0, CONT_MAX);
+}
+
+/* Fusion de un mapa: gana la marca de tiempo mas alta. Los metadatos que el
+   ganador no traiga se rellenan del otro lado: la tele nunca guardo el nombre
+   de sus favoritos (le basta la clave, filtra su catalogo), asi que sin esto
+   el movil los pintaria en blanco. */
+function mezclaMapas(a, b) {
+  var out = {}, k, mio, suyo, gana, otro;
+  for (k in a) if (a.hasOwnProperty(k)) out[k] = a[k];
+  for (k in b) {
+    if (!b.hasOwnProperty(k)) continue;
+    mio = out[k]; suyo = b[k];
+    if (!mio) { out[k] = suyo; continue; }
+    gana = ((suyo && suyo.ts) || 0) > ((mio && mio.ts) || 0) ? suyo : mio;
+    otro = (gana === suyo) ? mio : suyo;
+    out[k] = completaMeta(gana, otro);
+  }
+  return out;
+}
+
+function completaMeta(gana, otro) {
+  var r = {}, k, i, c;
+  var campos = ["n", "img", "ext", "sid", "temp", "eidx", "sname"];
+  for (k in gana) if (gana.hasOwnProperty(k)) r[k] = gana[k];
+  for (i = 0; i < campos.length; i++) {
+    c = campos[i];
+    if ((r[c] === undefined || r[c] === "") && otro && otro[c] !== undefined && otro[c] !== "") r[c] = otro[c];
+  }
+  return r;
+}
+
+function podaLapidas(m) {
+  var lim = nowSec() - SYNC.lapida, k;
+  for (k in m) {
+    if (m.hasOwnProperty(k) && m[k] && m[k].b && (m[k].ts || 0) < lim) delete m[k];
+  }
+  return m;
+}
+
+function podaMapa(m, max) {
+  var ks = [], k, i;
+  for (k in m) if (m.hasOwnProperty(k)) ks.push(k);
+  if (ks.length <= max) return m;
+  ks.sort(function (a, b) { return (m[a].ts || 0) - (m[b].ts || 0); });
+  for (i = 0; i < ks.length - max; i++) delete m[ks[i]];
+  return m;
+}
+
+/* Firma estable para decidir si hace falta escribir. JSON.stringify a secas
+   depende del orden en que se metieron las claves y provocaria una escritura
+   en cada vuelta aunque no hubiese cambiado nada. */
+function firma(m) {
+  var ks = [], k, i, out = [];
+  for (k in m) if (m.hasOwnProperty(k)) ks.push(k);
+  ks.sort();
+  for (i = 0; i < ks.length; i++) {
+    var v = m[ks[i]] || {};
+    out.push(ks[i] + ":" + (v.ts || 0) + "," + (v.b ? 1 : 0) + "," + (v.t || 0) + "," + (v.d || 0) +
+             "," + (v.n || "") + "," + (v.ext || ""));
+  }
+  return out.join("|");
+}
+
+function jsonDeCampo(c) {
+  try {
+    var v = JSON.parse((c && c.stringValue) || "{}");
+    return (v && typeof v === "object") ? v : {};
+  } catch (e) { return {}; }
+}
+
+function syncPronto() {
+  if (SYNC.timer) clearTimeout(SYNC.timer);
+  SYNC.timer = setTimeout(function () { SYNC.timer = null; syncAhora(); }, SYNC.espera);
+}
+
+function syncAhora(cb) {
+  if (SYNC.yendo) { SYNC.otraVez = true; if (cb) cb(false); return; }
+  SYNC.yendo = true;
+
+  function fin(cambio) {
+    SYNC.yendo = false;
+    if (SYNC.otraVez) { SYNC.otraVez = false; syncPronto(); }
+    if (cb) cb(cambio);
+  }
+
+  var x = new XMLHttpRequest(), listo = false;
+  function falla() { if (!listo) { listo = true; fin(false); } }
+  try {
+    x.open("GET", SYNC.doc + "?key=" + LATIDO.key, true);
+    x.timeout = 8000;
+    x.onerror = falla;
+    x.ontimeout = falla;
+    x.onload = function () {
+      if (listo) return;
+      listo = true;
+      var rem = { favs: {}, prog: {}, cont: {} };
+      if (x.status >= 200 && x.status < 300) {
+        try {
+          var f = JSON.parse(x.responseText).fields || {};
+          rem.favs = jsonDeCampo(f.favs);
+          rem.prog = jsonDeCampo(f.prog);
+          rem.cont = jsonDeCampo(f.cont);
+        } catch (e) { return fin(false); }
+      } else if (x.status !== 404) {
+        // 403, 500... no se toca nada: mejor no publicar a ciegas encima.
+        return fin(false);
+      }
+      syncFusiona(rem, fin);
+    };
+    x.send();
+  } catch (e2) { falla(); }
+}
+
+function syncFusiona(rem, fin) {
+  var antes = firma(DATA.favs) + "#" + firma(PROG) + "#" + firma(contMapa());
+
+  var favs = podaLapidas(mezclaMapas(DATA.favs, rem.favs));
+  var prog = podaMapa(mezclaMapas(PROG, rem.prog), PROG_MAX);
+  var cont = mezclaMapas(contMapa(), rem.cont);
+
+  DATA.favs = favs;
+  store("floptv_favs", JSON.stringify(favs));
+  PROG = prog;
+  store("floptv_prog", JSON.stringify(prog));
+  CONT = contDesdeMapa(cont);
+  saveCont();
+  cont = contMapa();            // recortado a CONT_MAX y ya normalizado
+
+  var cambio = (firma(favs) + "#" + firma(prog) + "#" + firma(cont)) !== antes;
+  if (cambio) syncRepinta();
+
+  var subir = firma(favs) !== firma(rem.favs) ||
+              firma(prog) !== firma(rem.prog) ||
+              firma(cont) !== firma(rem.cont);
+  if (!subir) return fin(cambio);
+
+  var y = new XMLHttpRequest(), listo = false;
+  function acaba() { if (!listo) { listo = true; fin(cambio); } }
+  try {
+    y.open("PATCH", SYNC.doc + "?key=" + LATIDO.key, true);
+    y.setRequestHeader("Content-Type", "application/json");
+    y.timeout = 10000;
+    y.onload = acaba;
+    y.onerror = acaba;
+    y.ontimeout = acaba;
+    y.send(JSON.stringify({ fields: {
+      favs: { stringValue: JSON.stringify(favs) },
+      prog: { stringValue: JSON.stringify(prog) },
+      cont: { stringValue: JSON.stringify(cont) }
+    } }));
+  } catch (e) { acaba(); }
+}
+
+/* Si en pantalla esta justo lo que ha cambiado, se repinta. Sin esto habria
+   que salir y volver a entrar para ver lo marcado en el movil. El cursor se
+   conserva: una sincronizacion de fondo no debe mover lo que estas mirando. */
+function syncRepinta() {
+  if (UI.screen !== "browse" || UI.serie) return;
+  var cat = DATA.cats[UI.sec] && DATA.cats[UI.sec][UI.catIdx];
+  if (cat && (cat.id === FAV_CAT || cat.id === CONT_CAT)) {
+    var pos = UI.itemIdx;
+    SYNC.repintando = true;
+    selectCategory(UI.catIdx);
+    SYNC.repintando = false;
+    if (DATA.view.length) {
+      UI.itemIdx = Math.min(pos, DATA.view.length - 1);
+      renderContent();
+    }
+  } else if (UI.sec === SEC.TV) {
+    renderChans();
+  } else {
+    markGridFav();
+    paintDetail();
+  }
+}
+
 function stopPlayback() {
   recordProgress();                 // guardar antes de soltar el medio
+  syncPronto();                     // ...y subir por donde iba, para el movil
   latidoPara();
   stopWatchdog();
   var v = $("video");
@@ -1858,21 +2128,54 @@ function paintEpg(id) {
 function idOf(it) { return it.stream_id !== undefined ? it.stream_id : it.series_id; }
 function favKey(sec, it) { return SEC_PREFIX[sec] + ":" + idOf(it); }
 
+/* Cada favorito es { ts, n, img, ext } y no un 1 a secas: la sincronizacion
+   con el movil necesita saber CUANDO se marco (para fusionar) y como se llama
+   (el movil pinta su lista de favoritos sin cargar el catalogo). */
 function loadFavs() {
   var raw = {};
   try { raw = JSON.parse(store("floptv_favs") || "{}") || {}; } catch (e) { raw = {}; }
-  // Las versiones anteriores guardaban solo el id numerico, y eran de TV.
-  var out = {}, k;
+  var out = {}, k, v;
   for (k in raw) {
     if (!raw.hasOwnProperty(k)) continue;
-    out[k.indexOf(":") < 0 ? "tv:" + k : k] = 1;
+    v = raw[k];
+    // Las versiones anteriores guardaban solo el id numerico, y eran de TV.
+    // Y antes de la sincronizacion el valor era 1: se migra con ts 0, para
+    // que la primera fusion sea la union de los dos aparatos (todavia no
+    // existe ninguna lapida que pueda ganarle).
+    out[k.indexOf(":") < 0 ? "tv:" + k : k] = (v && typeof v === "object") ? v : { ts: 0 };
   }
   DATA.favs = out;
 }
 
+function saveFavs() { store("floptv_favs", JSON.stringify(DATA.favs)); }
+
+/* Los favoritos que ya existian antes de la sincronizacion son solo una
+   clave: aqui nunca hizo falta el nombre. Al cargar una seccion se rellenan
+   desde el catalogo, o el movil los enseniaria como filas en blanco. */
+function enriqueceFavs(sec) {
+  var all = DATA.items[sec], i, k, f, toco = false;
+  if (!all) return;
+  for (i = 0; i < all.length; i++) {
+    k = favKey(sec, all[i]);
+    f = DATA.favs[k];
+    if (!f || f.b || f.n) continue;
+    f.n = all[i].name || "";
+    f.img = all[i].stream_icon || all[i].cover || "";
+    f.ext = all[i].container_extension || "";
+    toco = true;
+  }
+  if (toco) { saveFavs(); syncPronto(); }
+}
+
+/* Marcado de verdad: existe y no es una lapida. */
+function esFavClave(k) {
+  var f = DATA.favs[k];
+  return !!(f && !f.b);
+}
+
 function isFav(it) {
   if (!it || it._url) return false;            // los de "continuar viendo" no se marcan
-  return !!DATA.favs[favKey(UI.sec, it)];
+  return esFavClave(favKey(UI.sec, it));
 }
 
 function toggleFav() {
@@ -1880,8 +2183,17 @@ function toggleFav() {
   var it = DATA.view[UI.itemIdx];
   if (!it) return;
   var k = favKey(UI.sec, it);
-  if (DATA.favs[k]) delete DATA.favs[k]; else DATA.favs[k] = 1;
-  store("floptv_favs", JSON.stringify(DATA.favs));
+  if (esFavClave(k)) {
+    // Lapida, no borrado: quitandolo a secas el movil lo devolveria en la
+    // siguiente sincronizacion desde su propia copia.
+    DATA.favs[k] = { ts: nowSec(), b: 1 };
+  } else {
+    DATA.favs[k] = { ts: nowSec(), n: it.name || "",
+                     img: it.stream_icon || it.cover || "",
+                     ext: it.container_extension || "" };
+  }
+  saveFavs();
+  syncPronto();
 
   var cat = DATA.cats[UI.sec][UI.catIdx];
   if (cat && cat.id === FAV_CAT) selectCategory(UI.catIdx);   // la lista cambia
@@ -2302,9 +2614,11 @@ function selectCategory(idx) {
 
   if (cat.id === CONT_CAT) {
     DATA.view = contList(UI.sec);
+    if (!SYNC.repintando) syncAhora();     // por si se empezo algo en el movil
   } else if (cat.id === FAV_CAT) {
+    if (!SYNC.repintando) syncAhora();
     // Los favoritos tambien se filtran: si no, bastaria con marcarlos antes.
-    DATA.view = quitaAdultos(all.filter(function (c) { return DATA.favs[favKey(UI.sec, c)]; }), UI.sec);
+    DATA.view = quitaAdultos(all.filter(function (c) { return esFavClave(favKey(UI.sec, c)); }), UI.sec);
   } else if (cat.id === SEARCH_CAT) {
     DATA.view = quitaAdultos(searchIn(all, UI.search), UI.sec);
   } else if (cat.id === ALL_CAT) {
@@ -2353,6 +2667,7 @@ function ensureSection(sec, cb) {
       if (err2) return cb(err2);
       DATA.items[sec] = items || [];
       DATA.loaded[sec] = true;
+      enriqueceFavs(sec);       // rellena el nombre de los favoritos antiguos
       splash("Listo", 100);
       cb(null);
     });
@@ -2973,6 +3288,9 @@ function boot() {
       }
     }
     renderContent();
+    // Lo marcado en el movil se trae ya puesta la pantalla: la sincronizacion
+    // nunca retrasa el arranque, y si falla no pasa nada.
+    syncAhora();
   });
 }
 
