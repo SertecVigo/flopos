@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -461,12 +461,14 @@ var SEC_NAMES = ["TV EN DIRECTO", "PELICULAS", "SERIES"];
 var SEC_PREFIX = ["tv", "vod", "ser"];
 
 var DATA = {
-  cats:   [[], [], []],
-  items:  [[], [], []],
-  loaded: [false, false, false],
-  view:   [],
-  favs:   {}
+  cats:    [[], [], []],
+  items:   [[], [], []],
+  loaded:  [false, false, false],
+  loadedAt:[0, 0, 0],              // ms de la ultima descarga, para TTL
+  view:    [],
+  favs:    {}
 };
+var CATALOGO_TTL_MS = 2 * 3600 * 1000;    // 2 h: refresca al entrar en la seccion
 
 var UI = {
   screen: "splash",
@@ -529,9 +531,13 @@ function splash(state, pct, hint) {
    ===================================================================== */
 
 function apiUrl(qs) {
+  // Cache-buster: Chrome 38 cachea la respuesta de player_api.php (misma URL
+  // cada vez, sin cabeceras anti-cache del proveedor) y las peliculas o series
+  // nuevas no aparecen hasta que el navegador decide revalidar. Un parametro
+  // extra es ignorado por Xtream y rompe la cache.
   return CFG.proto + CFG.host + "/player_api.php?username=" +
          encodeURIComponent(CFG.user) + "&password=" + encodeURIComponent(CFG.pass) +
-         (qs ? "&" + qs : "");
+         (qs ? "&" + qs : "") + "&_=" + (new Date()).getTime();
 }
 function liveUrl(id)       { return CFG.proto + CFG.host + "/live/"   + encodeURIComponent(CFG.user) + "/" + encodeURIComponent(CFG.pass) + "/" + id + ".ts"; }
 function movieUrl(id, ext) { return CFG.proto + CFG.host + "/movie/"  + encodeURIComponent(CFG.user) + "/" + encodeURIComponent(CFG.pass) + "/" + id + "." + (ext || "mp4"); }
@@ -540,6 +546,10 @@ function seriesUrl(id, ext){ return CFG.proto + CFG.host + "/series/" + encodeUR
 function apiGet(qs, cb) {
   var xhr = new XMLHttpRequest();
   xhr.open("GET", apiUrl(qs), true);
+  // Cinturon y tirantes con el cache-buster: algunos intermedios respetan
+  // mejor estas cabeceras que la variacion de query string.
+  try { xhr.setRequestHeader("Cache-Control", "no-cache"); } catch (e) {}
+  try { xhr.setRequestHeader("Pragma", "no-cache"); } catch (e) {}
   xhr.timeout = 60000;
   xhr.onload = function () {
     var txt = xhr.responseText || "";
@@ -2651,9 +2661,13 @@ var SEC_API = [
   { cats: "action=get_series_categories", items: "action=get_series" }
 ];
 
-/* Peliculas (21 MB) y series (4,9 MB) se cargan solo al entrar. */
+/* Peliculas (21 MB) y series (4,9 MB) se cargan solo al entrar. Si pasaron
+   mas de CATALOGO_TTL_MS desde la ultima carga, se vuelve a pedir para que
+   aparezcan los titulos nuevos sin tener que cerrar la app (webOS la deja en
+   memoria al pulsar HOME). AZUL sigue siendo el refresco manual. */
 function ensureSection(sec, cb) {
-  if (DATA.loaded[sec]) return cb(null);
+  var ahora = (new Date()).getTime();
+  if (DATA.loaded[sec] && (ahora - (DATA.loadedAt[sec] || 0)) < CATALOGO_TTL_MS) return cb(null);
   var api = SEC_API[sec];
   show("splash");
   splash("Cargando " + SEC_NAMES[sec].toLowerCase() + "...", 25,
@@ -2667,6 +2681,7 @@ function ensureSection(sec, cb) {
       if (err2) return cb(err2);
       DATA.items[sec] = items || [];
       DATA.loaded[sec] = true;
+      DATA.loadedAt[sec] = (new Date()).getTime();
       enriqueceFavs(sec);       // rellena el nombre de los favoritos antiguos
       splash("Listo", 100);
       cb(null);
