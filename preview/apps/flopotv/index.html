@@ -2679,7 +2679,17 @@ function ensureSection(sec, cb) {
     splash("Cargando " + SEC_NAMES[sec].toLowerCase() + "...", 60);
     apiGet(api.items, function (err2, items) {
       if (err2) return cb(err2);
-      DATA.items[sec] = items || [];
+      items = items || [];
+      // Peliculas y series: lo mas nuevo arriba (como MaxPlayer). El proveedor
+      // devuelve el array por orden de id/added ascendente, asi que lo nuevo
+      // caia al final del catalogo y parecia "que no estaba". TV son canales,
+      // no se ordena.
+      if (sec !== SEC.TV) {
+        items.sort(function (a, b) {
+          return (parseInt(b && b.added, 10) || 0) - (parseInt(a && a.added, 10) || 0);
+        });
+      }
+      DATA.items[sec] = items;
       DATA.loaded[sec] = true;
       DATA.loadedAt[sec] = (new Date()).getTime();
       enriqueceFavs(sec);       // rellena el nombre de los favoritos antiguos
