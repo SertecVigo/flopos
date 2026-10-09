@@ -546,10 +546,10 @@ function seriesUrl(id, ext){ return CFG.proto + CFG.host + "/series/" + encodeUR
 function apiGet(qs, cb) {
   var xhr = new XMLHttpRequest();
   xhr.open("GET", apiUrl(qs), true);
-  // Cinturon y tirantes con el cache-buster: algunos intermedios respetan
-  // mejor estas cabeceras que la variacion de query string.
-  try { xhr.setRequestHeader("Cache-Control", "no-cache"); } catch (e) {}
-  try { xhr.setRequestHeader("Pragma", "no-cache"); } catch (e) {}
+  // NUNCA cabeceras propias (Cache-Control, Pragma...): no son "simples",
+  // fuerzan un preflight OPTIONS y este proveedor lo contesta sin
+  // Access-Control-Allow-* -> el catalogo entero falla (rompio la 0.22.0).
+  // Contra la cache basta el parametro "_" de apiUrl.
   xhr.timeout = 60000;
   xhr.onload = function () {
     var txt = xhr.responseText || "";
