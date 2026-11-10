@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -60,16 +60,36 @@
     from { opacity: 0; transform: translate3d(-42px, 0, 0); }
     to   { opacity: 1; transform: translate3d(0, 0, 0); }
   }
+  /* Las ventanas (PIN, reanudar, pistas) suben un poco mientras aparecen: el
+     mismo gesto que en los factories y en el movil. */
   @-webkit-keyframes aparece {
-    from { opacity: 0; -webkit-transform: scale(0.96); }
-    to   { opacity: 1; -webkit-transform: scale(1); }
+    from { opacity: 0; -webkit-transform: translate3d(0, 16px, 0) scale(0.96); }
+    to   { opacity: 1; -webkit-transform: translate3d(0, 0, 0) scale(1); }
   }
   @keyframes aparece {
-    from { opacity: 0; transform: scale(0.96); }
-    to   { opacity: 1; transform: scale(1); }
+    from { opacity: 0; transform: translate3d(0, 16px, 0) scale(0.96); }
+    to   { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
   @-webkit-keyframes funde { from { opacity: 0; } to { opacity: 1; } }
   @keyframes funde { from { opacity: 0; } to { opacity: 1; } }
+  @-webkit-keyframes sale { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes sale { from { opacity: 1; } to { opacity: 0; } }
+  @-webkit-keyframes logo {
+    from { opacity: 0; -webkit-transform: scale(0.7); }
+    to   { opacity: 1; -webkit-transform: scale(1); }
+  }
+  @keyframes logo {
+    from { opacity: 0; transform: scale(0.7); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @-webkit-keyframes fila {
+    from { opacity: 0; -webkit-transform: translate3d(0, -8px, 0); }
+    to   { opacity: 1; -webkit-transform: translate3d(0, 0, 0); }
+  }
+  @keyframes fila {
+    from { opacity: 0; transform: translate3d(0, -8px, 0); }
+    to   { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
 
   /* ---------- configuracion y arranque ---------- */
   /* El collage se hereda del body; aqui va solo el velo. Todo estatico: no se
@@ -111,7 +131,39 @@
   .btn.focus { background: #7c5cff; border-color: #a893ff; }
   .msg { margin-top: 24px; font-size: 21px; color: #ff8f8f; min-height: 28px; }
   .hint { margin-top: 20px; font-size: 20px; color: #939bc8; line-height: 1.6; }
-  #splash .state { margin-top: 40px; font-size: 26px; color: #9aa2d0; }
+  /* Arranque: solo logo y barra, centrados. El texto de estado solo se pinta
+     cuando hay algo que decir (un error o un aviso de espera larga). La barra
+     es real: avanza con cada paso de la carga. */
+  #splash .sp-c { position: absolute; left: 0; top: 330px; width: 1920px; text-align: center; }
+  .sp-logo { display: inline-block; width: 220px; height: 220px; border-radius: 48px;
+             background: #7c5cff; color: #ffffff; font-weight: 800; text-shadow: none;
+             -webkit-animation: logo 620ms cubic-bezier(.34,1.56,.64,1) both;
+             animation: logo 620ms cubic-bezier(.34,1.56,.64,1) both; }
+  .sp-logo span { display: block; margin-top: 44px; font-size: 50px; line-height: 50px; }
+  .sp-logo b { display: block; font-size: 92px; line-height: 92px; letter-spacing: -2px; }
+  #splash .bar { margin: 54px auto 0 auto; width: 420px; height: 8px; overflow: hidden; }
+  #splash .state { margin-top: 30px; font-size: 26px; color: #9aa2d0; min-height: 32px; }
+  #splash .hint { margin-top: 10px; }
+  /* Al pasar del arranque al menu, el arranque se funde por encima en vez de
+     desaparecer de golpe (lo pone show()). */
+  #splash.fuera { display: block; z-index: 20;
+                  -webkit-animation: sale 300ms ease-in both; animation: sale 300ms ease-in both; }
+  /* Tras el arranque, las secciones del menu entran una detras de otra. Son
+     cuatro filas fijas; las listas largas NO se animan (se reciclan). */
+  #secs.inicio .row { -webkit-animation: fila 340ms cubic-bezier(.2,.8,.2,1) 160ms both;
+                      animation: fila 340ms cubic-bezier(.2,.8,.2,1) 160ms both; }
+  #secs.inicio .row:nth-child(2) { -webkit-animation-delay: 220ms; animation-delay: 220ms; }
+  #secs.inicio .row:nth-child(3) { -webkit-animation-delay: 280ms; animation-delay: 280ms; }
+  #secs.inicio .row:nth-child(4) { -webkit-animation-delay: 340ms; animation-delay: 340ms; }
+
+  /* Ajustes: aspecto y color. Izquierda/derecha cambian el valor. */
+  .opt { display: block; width: 520px; margin: 0; font-weight: 400; }
+  .opt b { font-weight: 700; }
+  .opt i { display: inline-block; width: 26px; height: 26px; border-radius: 13px;
+           margin: 0 12px -3px 0; border: 2px solid #ffffff; }
+  .vs { color: #6ee7a8; }
+  .es { color: #ffd479; }
+
   .bar { margin-top: 18px; width: 620px; height: 8px; background: #1a2145; border-radius: 4px; }
   .bar i { display: block; height: 8px; width: 0; background: #7c5cff; border-radius: 4px;
            transition: width 280ms ease-out; }
@@ -125,13 +177,13 @@
      tres elementos animandose, no cientos. */
   #secs { position: absolute; top: 0; left: 0; width: 250px; height: 1080px;
           background: rgba(6,8,18,0.82); border-right: 2px solid #1d2450;
-          -webkit-animation: entra 220ms ease-out both; animation: entra 220ms ease-out both; }
+          -webkit-animation: entra 260ms cubic-bezier(.2,.8,.2,1) both; animation: entra 260ms cubic-bezier(.2,.8,.2,1) both; }
   #cats { position: absolute; top: 0; left: 250px; width: 380px; height: 1080px;
           background: rgba(9,12,26,0.80); border-right: 2px solid #1d2450;
-          -webkit-animation: entra 220ms ease-out 60ms both; animation: entra 220ms ease-out 60ms both; }
+          -webkit-animation: entra 260ms cubic-bezier(.2,.8,.2,1) 60ms both; animation: entra 260ms cubic-bezier(.2,.8,.2,1) 60ms both; }
   #cont { position: absolute; top: 0; left: 630px; width: 1290px; height: 1080px;
           background: rgba(7,9,20,0.66);
-          -webkit-animation: entra 240ms ease-out 110ms both; animation: entra 240ms ease-out 110ms both; }
+          -webkit-animation: entra 280ms cubic-bezier(.2,.8,.2,1) 120ms both; animation: entra 280ms cubic-bezier(.2,.8,.2,1) 120ms both; }
   #browse.tv #cont { width: 700px; background: rgba(7,9,20,0.74); border-right: 2px solid #1d2450; }
 
   .head { height: 84px; line-height: 84px; padding: 0 26px;
@@ -255,7 +307,7 @@
          background: rgba(5,7,15,0.94); display: none; }
   #pin.on { display: block; }
   .pw { position: absolute; left: 560px; top: 340px; width: 800px; padding: 44px 48px;
-        -webkit-animation: aparece 200ms ease-out; animation: aparece 200ms ease-out;
+        -webkit-animation: aparece 260ms cubic-bezier(.2,.8,.2,1); animation: aparece 260ms cubic-bezier(.2,.8,.2,1);
         background: rgba(9,12,26,0.98); border: 3px solid #2a3161; border-radius: 18px;
         text-align: center; }
   .pw .pt { font-size: 32px; font-weight: 700; }
@@ -272,7 +324,7 @@
             background: rgba(5,7,15,0.90); display: none; }
   #resume.on { display: block; }
   .rw { position: absolute; left: 460px; top: 320px; width: 1000px; padding: 44px 48px;
-        -webkit-animation: aparece 200ms ease-out; animation: aparece 200ms ease-out;
+        -webkit-animation: aparece 260ms cubic-bezier(.2,.8,.2,1); animation: aparece 260ms cubic-bezier(.2,.8,.2,1);
         background: rgba(9,12,26,0.98); border: 3px solid #2a3161; border-radius: 18px; }
   .rw .rt { font-size: 34px; font-weight: 700; line-height: 1.3; }
   .rw .rs { margin-top: 14px; font-size: 23px; color: #9aa2d0; }
@@ -285,7 +337,7 @@
             background: rgba(5,7,15,0.88); display: none; }
   #tracks.on { display: block; }
   .tw { position: absolute; left: 360px; top: 170px; width: 1200px; height: 740px;
-        -webkit-animation: aparece 200ms ease-out; animation: aparece 200ms ease-out;
+        -webkit-animation: aparece 260ms cubic-bezier(.2,.8,.2,1); animation: aparece 260ms cubic-bezier(.2,.8,.2,1);
         background: rgba(9,12,26,0.97); border: 3px solid #2a3161; border-radius: 18px; }
   .th { height: 86px; line-height: 86px; padding: 0 36px; font-size: 26px;
         letter-spacing: 2px; color: #7c5cff; font-weight: 700; }
@@ -304,6 +356,76 @@
             background: rgba(5,7,15,0.82); border-left: 5px solid #7c5cff;
             font-size: 25px; display: none; }
   #status.on { display: block; }
+
+  /* =================== MODO CLARO (Ajustes > Aspecto) ===================
+     Chrome 38 no tiene var(): el modo claro es este bloque, que pisa los
+     colores del oscuro con `html.claro` delante. El color del tema NO va
+     aqui: aplicaAspecto() sustituye el morado en toda la hoja, este bloque
+     incluido. Lo que va SOBRE EL VIDEO (OSD y aviso de estado) se queda
+     oscuro en los dos modos. */
+  html.claro body { color: #151936; }
+  html.claro #osd, html.claro #status { color: #e8ebff; }
+  html.claro #setup, html.claro #splash {
+    background: rgba(244,245,251,0.86);
+    background: -webkit-linear-gradient(left, rgba(244,245,251,0.95) 0%,
+                rgba(244,245,251,0.86) 42%, rgba(244,245,251,0.50) 100%);
+    background: linear-gradient(to right, rgba(244,245,251,0.95) 0%,
+                rgba(244,245,251,0.86) 42%, rgba(244,245,251,0.50) 100%);
+    text-shadow: 0 1px 6px rgba(255,255,255,0.95);
+  }
+  html.claro #splash { background: rgba(244,245,251,0.88); }
+  html.claro .sp-logo { text-shadow: none; }
+  html.claro .tag { color: #4b5380; }
+  html.claro .label { color: #5a6390; }
+  html.claro .box { background: #ffffff; border-color: #c9cfe6; color: #151936; }
+  html.claro .btn { background: #ffffff; border-color: #c9cfe6; text-shadow: none; }
+  html.claro .focus { border-color: #7c5cff; background: #e6e9f7; }
+  html.claro .btn.focus { background: #7c5cff; border-color: #a893ff; color: #ffffff; }
+  html.claro .opt i { border-color: #151936; }
+  html.claro .btn.focus i { border-color: #ffffff; }
+  html.claro .msg { color: #c0264a; }
+  html.claro .hint { color: #5a6390; }
+  html.claro #splash .state { color: #4b5380; }
+  html.claro .bar { background: #d3d8ec; }
+  html.claro .vs { color: #15803d; }
+  html.claro .es { color: #c98a00; }
+
+  html.claro #browse { background: rgba(244,245,251,0.60); }
+  html.claro #secs { background: rgba(250,250,254,0.93); border-right-color: #d3d8ec; }
+  html.claro #cats { background: rgba(246,247,252,0.91); border-right-color: #d3d8ec; }
+  html.claro #cont { background: rgba(244,245,251,0.84); }
+  html.claro #browse.tv #cont { background: rgba(244,245,251,0.89); border-right-color: #d3d8ec; }
+  html.claro .row { color: #333a5c; }
+  html.claro .row.sel { background: #dfe3f5; color: #151936; border-left-color: #b4bbd8; }
+  html.claro .row.cur { background: #7c5cff; color: #ffffff; border-left-color: #cdbfff; }
+  html.claro .row b { color: #7a83ac; }
+  html.claro .row.cur b { color: #e2ddff; }
+  html.claro .row em { color: #c98a00; }
+  html.claro .row.cur em { color: #ffd479; }
+  html.claro .cell { background: #e2e5f3; }
+  html.claro .cell.cur { border-color: #7c5cff; background: #ffffff; }
+  html.claro .cell img { background: #d9ddee; }
+  html.claro .cell .t { color: #333a5c; }
+  html.claro .cell.cur .t { color: #151936; }
+  html.claro #detail, html.claro #info { background: rgba(255,255,255,0.95); border-color: #d3d8ec; }
+  html.claro #detail .dp { color: #4b5380; }
+  html.claro #info .c { color: #5a6390; }
+  html.claro #epg { border-top-color: #d3d8ec; }
+  html.claro #epg .et { color: #4b5380; }
+  html.claro #epg .eb { background: #d3d8ec; }
+  html.claro #epg .ed, html.claro #epg .nx { color: #5a6390; }
+  html.claro #keys { color: #4b5380; text-shadow: 0 1px 5px rgba(255,255,255,0.95); }
+  html.claro #keys u { color: #151936; }
+  html.claro #search { background: rgba(244,245,251,0.96); }
+  html.claro #s_res { color: #4b5380; }
+  html.claro #pin, html.claro #resume, html.claro #tracks { background: rgba(20,24,50,0.55); }
+  html.claro .pw, html.claro .rw, html.claro .tw { background: rgba(255,255,255,0.98); border-color: #c9cfe6; }
+  html.claro .pw .ps, html.claro .rw .rs { color: #4b5380; }
+  html.claro .pw .pd b { background: #eef0f8; border-color: #c9cfe6; }
+  html.claro .pw .pd b.lleno { border-color: #7c5cff; background: #e6e9f7; }
+  html.claro .pw .pe { color: #c0264a; }
+  html.claro .tcol + .tcol { border-left-color: #d3d8ec; }
+  html.claro .tcol .tt, html.claro .tf { color: #5a6390; }
 </style>
 </head>
 <body>
@@ -312,23 +434,27 @@
 
 <div id="setup" class="screen">
   <div class="brand">Flopo<span>TV</span></div>
-  <div class="tag">Introduce los datos de tu servicio. Se guardan solo en esta tele.</div>
-  <div class="field">
+  <div class="tag" id="setup_tag">Introduce los datos de tu servicio. Se guardan solo en esta tele.</div>
+  <div class="field" id="c_host">
     <div class="label">Servidor: host y puerto, sin http://</div>
     <input id="f_host" class="box" type="text" placeholder="miservidor.com:8080">
   </div>
-  <div class="field"><div class="label">Usuario</div><input id="f_user" class="box" type="text"></div>
-  <div class="field"><div class="label">Contrasena</div><input id="f_pass" class="box" type="text"></div>
+  <div class="field" id="c_user"><div class="label">Usuario</div><input id="f_user" class="box" type="text"></div>
+  <div class="field" id="c_pass"><div class="label">Contrasena</div><input id="f_pass" class="box" type="text"></div>
+  <div class="field"><div class="label">Aspecto</div><div id="f_modo" class="btn opt">&nbsp;</div></div>
+  <div class="field"><div class="label">Color del tema</div><div id="f_color" class="btn opt">&nbsp;</div></div>
   <div><div id="b_go" class="btn">Entrar</div><div id="b_clear" class="btn">Borrar</div></div>
   <div id="setup_msg" class="msg"></div>
-  <div class="hint">Flechas para moverte &middot; OK para escribir o pulsar &middot; ATRAS cierra el teclado.</div>
+  <div class="hint" id="setup_hint">Flechas para moverte &middot; OK para escribir o pulsar &middot; ATRAS cierra el teclado.</div>
 </div>
 
 <div id="splash" class="screen">
-  <div class="brand">Flopo<span>TV</span></div>
-  <div class="state" id="splash_state">Conectando...</div>
-  <div class="bar"><i id="splash_bar"></i></div>
-  <div class="hint" id="splash_hint"></div>
+  <div class="sp-c">
+    <div class="sp-logo"><span>Flopo</span><b>TV</b></div>
+    <div class="bar"><i id="splash_bar"></i></div>
+    <div class="state" id="splash_state">&nbsp;</div>
+    <div class="hint" id="splash_hint"></div>
+  </div>
 </div>
 
 <div id="browse" class="screen tv">
@@ -459,6 +585,9 @@ var CFG = { host: "", user: "", pass: "", proto: "http://" };
 var SEC = { TV: 0, VOD: 1, SERIES: 2 };
 var SEC_NAMES = ["TV EN DIRECTO", "PELICULAS", "SERIES"];
 var SEC_PREFIX = ["tv", "vod", "ser"];
+// El menu de la izquierda lleva las tres secciones y, debajo, AJUSTES.
+var MENU_AJUSTES = SEC_NAMES.length;
+var MENU_N = SEC_NAMES.length + 1;
 
 var DATA = {
   cats:    [[], [], []],
@@ -504,9 +633,18 @@ var FAV_CAT = "__fav__", ALL_CAT = "__all__", SEARCH_CAT = "__search__", CONT_CA
 function secClass() { return UI.sec === SEC.TV ? "tv" : (UI.sec === SEC.VOD ? "vod" : "series"); }
 
 function show(id) {
+  var eraArranque = UI.screen === "splash";
   var s = document.querySelectorAll(".screen");
   for (var i = 0; i < s.length; i++) s[i].className = "screen";
   if (id) $(id).className = "screen on" + (id === "browse" ? " " + secClass() : "");
+  // Del arranque al menu: el arranque se funde por encima mientras el menu
+  // entra por debajo. La clase se retira sola; si entretanto se ha vuelto a
+  // mostrar el arranque, ya no la lleva y no se toca.
+  if (eraArranque && id === "browse") {
+    var sp = $("splash");
+    sp.className = "screen fuera";
+    setTimeout(function () { if (sp.className === "screen fuera") sp.className = "screen"; }, 340);
+  }
   UI.screen = id || "player";
   // La leyenda dice a que devuelve ATRAS, y eso cambia con lo que se este
   // viendo: se repinta cada vez que se entra al menu.
@@ -520,11 +658,69 @@ function setStatus(text) {
   el.className = "on";
 }
 
+/* Arranque de solo logo y barra: el texto de estado se pinta unicamente si
+   viene con explicacion (`hint`), que es el caso de un error o de una espera
+   larga anunciada. «Conectando...» y «Listo» ya los cuenta la barra. */
 function splash(state, pct, hint) {
-  $("splash_state").innerHTML = esc(state);
-  $("splash_bar").style.width = Math.round(pct * 6.2) + "px";
-  if (hint !== undefined) $("splash_hint").innerHTML = esc(hint);
+  if (hint !== undefined) {
+    $("splash_hint").innerHTML = esc(hint);
+    $("splash_state").innerHTML = hint ? esc(state) : "&nbsp;";
+  }
+  $("splash_bar").style.width = Math.round(pct * 4.2) + "px";
 }
+
+/* =====================================================================
+   3b. Aspecto: color del tema y claro/oscuro
+   =====================================================================
+   Chrome 38 no tiene variables CSS. El color se cambia sustituyendo el morado
+   (y sus tres tonos claros) en el texto de la hoja de estilos entera; el modo
+   claro es un bloque `html.claro` de la propia hoja. Mismas claves y mismos
+   colores que el movil (floptv_tema, floptv_modo), pero cada aparato guarda
+   lo suyo: no se sincroniza. */
+
+var TEMAS = [["Morado", "#7c5cff"], ["Azul", "#2f7df6"], ["Turquesa", "#0d9488"],
+             ["Verde", "#16a34a"], ["Ambar", "#d97706"], ["Naranja", "#ea580c"],
+             ["Rojo", "#e11d48"], ["Rosa", "#db2777"]];
+var CSS_BASE = null;
+
+function temaIdx() {
+  var c = String(store("floptv_tema") || "").toLowerCase();
+  for (var i = 0; i < TEMAS.length; i++) if (TEMAS[i][1] === c) return i;
+  return 0;
+}
+function esClaro() { return store("floptv_modo") === "claro"; }
+
+/* Mezcla un color con blanco: t=0 lo deja igual, t=1 es blanco. */
+function aclara(hex, t) {
+  var n = parseInt(hex.substring(1), 16);
+  var rgb = [n >> 16, (n >> 8) & 255, n & 255], out = "#";
+  for (var i = 0; i < 3; i++) {
+    var x = Math.round(rgb[i] + (255 - rgb[i]) * t).toString(16);
+    out += x.length < 2 ? "0" + x : x;
+  }
+  return out;
+}
+
+function aplicaAspecto() {
+  try {
+    var st = document.getElementsByTagName("style")[0];
+    if (CSS_BASE === null) CSS_BASE = st.innerHTML;
+    var col = TEMAS[temaIdx()][1];
+    var css = CSS_BASE;
+    if (col !== TEMAS[0][1]) {
+      css = css.replace(/#7c5cff/gi, col)
+               .replace(/#a893ff/gi, aclara(col, 0.35))
+               .replace(/#cdbfff/gi, aclara(col, 0.62))
+               .replace(/#e2ddff/gi, aclara(col, 0.78));
+    }
+    if (st.innerHTML !== css) {
+      while (st.firstChild) st.removeChild(st.firstChild);
+      st.appendChild(document.createTextNode(css));
+    }
+    document.documentElement.className = esClaro() ? "claro" : "";
+  } catch (e) {}
+}
+aplicaAspecto();   // antes de mostrar nada: el arranque ya sale con su color
 
 /* =====================================================================
    4. API Xtream
@@ -2345,11 +2541,12 @@ function clampTop(top, idx, total, win) {
 function renderSecs() {
   var nodes = $("secs_list").childNodes;
   for (var i = 0; i < nodes.length; i++) {
-    if (i >= SEC_NAMES.length) { nodes[i].innerHTML = ""; nodes[i].className = "row"; continue; }
+    if (i >= MENU_N) { nodes[i].innerHTML = ""; nodes[i].className = "row"; continue; }
     var cls = "row";
     if (UI.col === 0 && i === UI.secIdx) cls += " cur";
     else if (i === UI.sec) cls += " sel";
-    nodes[i].innerHTML = esc(SEC_NAMES[i]);
+    // La ultima fila no es una seccion del catalogo: abre los ajustes.
+    nodes[i].innerHTML = i === MENU_AJUSTES ? "AJUSTES" : esc(SEC_NAMES[i]);
     nodes[i].className = cls;
   }
 }
@@ -2542,8 +2739,8 @@ function paintDetail() {
     return;
   }
   $("d_title").innerHTML = esc(it.name) +
-    (!UI.serie && isFav(it) ? '  <span style="color:#ffd479">&#9733;</span>' : "") +
-    (isSeen(UI.sec, it) ? '  <span style="color:#6ee7a8">&#10003; visto</span>' : "");
+    (!UI.serie && isFav(it) ? '  <span class="es">&#9733;</span>' : "") +
+    (isSeen(UI.sec, it) ? '  <span class="vs">&#10003; visto</span>' : "");
 
   var meta = [];
   if (it.year) meta.push(it.year);
@@ -3035,7 +3232,7 @@ function doSearch() {
 
 function moveFocus(delta) {
   if (UI.col === 0) {
-    UI.secIdx = (UI.secIdx + delta + SEC_NAMES.length) % SEC_NAMES.length;
+    UI.secIdx = (UI.secIdx + delta + MENU_N) % MENU_N;
     renderSecs();
     return;
   }
@@ -3147,12 +3344,14 @@ document.addEventListener("keydown", function (e) {
     if (k === KEY.RIGHT) {
       if (UI.sec !== SEC.TV && UI.col === 2 && (UI.itemIdx + 1) % GCOLS !== 0 && UI.itemIdx + 1 < DATA.view.length) moveFocus(1);
       else if (UI.col === 1) { if (intentaEntrar()) { UI.col = 2; renderSecs(); renderCats(); renderContent(); previewDebounced(); } }
-      else if (UI.col < 2) { UI.col++; renderSecs(); renderCats(); renderContent(); previewDebounced(); }
+      // Al salir del menu el cursor vuelve a la seccion abierta: AJUSTES no
+      // es una seccion y no puede quedarse marcada.
+      else if (UI.col < 2) { if (UI.col === 0) UI.secIdx = UI.sec; UI.col++; renderSecs(); renderCats(); renderContent(); previewDebounced(); }
       e.preventDefault(); return;
     }
 
     if (k === KEY.OK) {
-      if (UI.col === 0) switchSection(UI.secIdx);
+      if (UI.col === 0) { if (UI.secIdx === MENU_AJUSTES) openAjustes(); else switchSection(UI.secIdx); }
       else if (UI.col === 1) { if (intentaEntrar()) { UI.col = 2; renderCats(); renderContent(); previewDebounced(); } }
       else openItem();
       e.preventDefault(); return;
@@ -3205,35 +3404,97 @@ document.addEventListener("keydown", function (e) {
    en el codigo: este IPK se publica en un repo publico). */
 var HOST_DEF = "aplicasmart.space:9955";
 
-var setupItems = ["f_host", "f_user", "f_pass", "b_go", "b_clear"];
+/* La misma pantalla sirve para dos cosas:
+   - datos de conexion (primer uso, o cuando falla la conexion): todo;
+   - AJUSTES desde el menu: solo aspecto y color. Ahi los datos de conexion se
+     ESCONDEN: la contrasena no tiene por que salir en pantalla cada vez que
+     alguien entra a cambiar un color. */
+var SETUP_TODO = ["f_host", "f_user", "f_pass", "f_modo", "f_color", "b_go", "b_clear"];
+var SETUP_AJUSTES = ["f_modo", "f_color", "b_go"];
+var SOLO_CONEXION = ["c_host", "c_user", "c_pass", "b_clear"];
+var setupItems = SETUP_TODO;
+var enAjustes = false;
 var setupIdx = 0;
 var typing = false;
+
+function pintaAspecto() {
+  var t = TEMAS[temaIdx()];
+  $("f_modo").innerHTML = "&lsaquo; &nbsp;<b>" + (esClaro() ? "Claro" : "Oscuro") + "</b>&nbsp; &rsaquo;";
+  $("f_color").innerHTML = "&lsaquo; &nbsp;<i style=\"background:" + t[1] + "\"></i><b>" + t[0] + "</b>&nbsp; &rsaquo;";
+}
+
+function cambiaAspecto(id, paso) {
+  if (id === "f_modo") store("floptv_modo", esClaro() ? "oscuro" : "claro");
+  else store("floptv_tema", TEMAS[(temaIdx() + paso + TEMAS.length) % TEMAS.length][1]);
+  aplicaAspecto();
+  pintaAspecto();
+}
+
+function modoSetup(ajustes) {
+  enAjustes = ajustes;
+  setupItems = ajustes ? SETUP_AJUSTES : SETUP_TODO;
+  for (var i = 0; i < SOLO_CONEXION.length; i++) {
+    $(SOLO_CONEXION[i]).style.display = ajustes ? "none" : "";
+  }
+  $("b_go").innerHTML = ajustes ? "Volver" : "Entrar";
+  $("setup_tag").innerHTML = ajustes ? "Ajustes de esta tele."
+    : "Introduce los datos de tu servicio. Se guardan solo en esta tele.";
+  $("setup_hint").innerHTML = ajustes
+    ? "Arriba y abajo para moverte &middot; izquierda y derecha para cambiar &middot; ATRAS vuelve."
+    : "Flechas para moverte &middot; OK para escribir o pulsar &middot; ATRAS cierra el teclado.";
+  $("setup_msg").innerHTML = "";
+}
+
+function openAjustes() {
+  modoSetup(true);
+  setupIdx = 0;
+  pintaAspecto();
+  show("setup");
+  paintSetupFocus();
+}
+
+function cierraAjustes() {
+  modoSetup(false);
+  UI.secIdx = UI.sec;
+  show("browse");
+  renderSecs(); renderCats(); renderContent();
+}
 
 /* Abre la pantalla de datos garantizando que el servidor nunca quede vacio:
    "Borrar", una conexion fallida o un localStorage borrado lo dejaban en
    blanco y habia que teclearlo con el mando. */
 function openSetup() {
   if (!bareHost($("f_host").value)) $("f_host").value = CFG.host || HOST_DEF;
+  modoSetup(false);
+  pintaAspecto();
   show("setup");
   paintSetupFocus();
 }
 
 function paintSetupFocus() {
-  for (var i = 0; i < setupItems.length; i++) {
-    var el = $(setupItems[i]);
+  var foco = setupItems[setupIdx];
+  for (var i = 0; i < SETUP_TODO.length; i++) {
+    var el = $(SETUP_TODO[i]);
     var base = el.className.replace(/\s*focus\s*/g, "");
-    el.className = (i === setupIdx) ? base + " focus" : base;
+    el.className = (SETUP_TODO[i] === foco) ? base + " focus" : base;
   }
 }
 
 function setupKey(k) {
-  if (k === KEY.UP)   { setupIdx = (setupIdx + setupItems.length - 1) % setupItems.length; paintSetupFocus(); }
-  if (k === KEY.DOWN) { setupIdx = (setupIdx + 1) % setupItems.length; paintSetupFocus(); }
-  if (k === KEY.LEFT  && setupIdx === 4) { setupIdx = 3; paintSetupFocus(); }
-  if (k === KEY.RIGHT && setupIdx === 3) { setupIdx = 4; paintSetupFocus(); }
+  var n = setupItems.length;
+  var id = setupItems[setupIdx];
+  if (k === KEY.UP)   { setupIdx = (setupIdx + n - 1) % n; paintSetupFocus(); return; }
+  if (k === KEY.DOWN) { setupIdx = (setupIdx + 1) % n; paintSetupFocus(); return; }
+  if (k === KEY.BACK && enAjustes) return cierraAjustes();
+  // Aspecto y color: izquierda/derecha (u OK) cambian el valor al momento.
+  if (id === "f_modo" || id === "f_color") {
+    if (k === KEY.LEFT || k === KEY.RIGHT || k === KEY.OK) cambiaAspecto(id, k === KEY.LEFT ? -1 : 1);
+    return;
+  }
+  if (k === KEY.LEFT  && id === "b_clear") { setupIdx--; paintSetupFocus(); }
+  if (k === KEY.RIGHT && id === "b_go" && !enAjustes) { setupIdx++; paintSetupFocus(); }
   if (k === KEY.OK) {
-    var id = setupItems[setupIdx];
-    if (id === "b_go") return doLogin();
+    if (id === "b_go") return enAjustes ? cierraAjustes() : doLogin();
     // Borrar limpia las credenciales; el servidor vuelve al predefinido.
     if (id === "b_clear") { $("f_host").value = HOST_DEF; $("f_user").value = ""; $("f_pass").value = ""; return; }
     typing = true;
@@ -3298,6 +3559,9 @@ function boot() {
     UI.sec = SEC.TV; UI.secIdx = SEC.TV;
     UI.col = 2;
     paintKeys();
+    // Solo en el arranque: las filas del menu entran una detras de otra.
+    $("secs").className = "inicio";
+    setTimeout(function () { $("secs").className = ""; }, 1200);
     show("browse");
     renderSecs();
     selectCategory(1);
@@ -3320,7 +3584,7 @@ function boot() {
 }
 
 (function init() {
-  buildRows("secs_list", SEC_NAMES.length);
+  buildRows("secs_list", MENU_N);
   buildRows("cats_list", ROWS);
   buildRows("chans_list", ROWS);
   buildGrid();
